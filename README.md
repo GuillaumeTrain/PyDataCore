@@ -1,9 +1,12 @@
 # PyDataCore
 A basic library that can manage signalprocessing data as a datapool ,it handles asynchronuous acces and chunk stream as well as direct ram storage 
-Classe Data
+# Classe Data
 La classe Data dans la bibliothèque PyDataCore permet de stocker et de lire des données efficacement, que ce soit en mémoire (RAM) ou dans un fichier sur disque. Elle est spécialement conçue pour gérer des données volumineuses en les stockant et en les récupérant sous forme de chunks afin de ne pas surcharger la mémoire.
 
-# Data(data_id, data_type, data_name, data_size, data_is_in_file=False, sample_type='float')
+Constructeur
+python
+Copier le code
+Data(data_id, data_type, data_name, data_size, data_is_in_file=False, sample_type='float')
 Paramètres :
 data_id (str) : Identifiant unique de la donnée.
 data_type (str) : Type de la donnée (par exemple "SIGNAL").
