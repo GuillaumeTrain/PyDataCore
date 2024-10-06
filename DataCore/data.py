@@ -5,20 +5,22 @@ import os
 import tracemalloc
 
 class Data:
-    def __init__(self, data_id, data_type, data_name, data_size, in_file=False, sample_type='float'):
+    def __init__(self, data_id, data_type, data_name, data_size_in_bytes, num_samples, in_file=False, sample_type='float'):
         """
         initialise une instance de données.
         :param data_id: identifiant unique de données.
-        :param data_type: type de données (par exemple, temporal,freq, etc.). le type de données est laissé libre dans cette classe.
+        :param data_type: type de données (par exemple, temporal, freq, etc.).
         :param data_name: nom des données.
-        :param data_size: taille des données.
-        :param data_is_in_file: indique si les données sont stockées dans un fichier ou en mémoire.
-        :param sample_type: type de données (float32, float64, int32, int64). format str non supporté.
+        :param data_size_in_bytes: taille des données en octets.
+        :param num_samples: nombre de samples.
+        :param in_file: indique si les données sont stockées dans un fichier ou en mémoire.
+        :param sample_type: type de données (float32, float64, int32, int64, str).
         """
         self.data_id = data_id
         self.data_type = data_type
         self.data_name = data_name
-        self.data_size = data_size
+        self.data_size_in_bytes = data_size_in_bytes
+        self.num_samples = num_samples
         self.in_file = in_file
         self.sample_type = sample_type
         self.data = None
@@ -164,6 +166,7 @@ class Data:
         """Supprime les données, soit en RAM, soit en supprimant le fichier sur le disque."""
         if self.in_file and self.file_path:
             os.remove(self.file_path)
+        del self.data
         self.data = None
 
     def convert_ram_to_file(self, folder):
@@ -187,6 +190,7 @@ class Data:
                     f.write(packed_data)
 
             self.in_file = True
+            del self.data
             self.data = None
 
     def convert_file_to_ram(self):
@@ -240,9 +244,14 @@ def test_data_methods():
     for data_type in data_types:
         print(f"\nTest des méthodes pour le type de données : {data_type}")
 
+        # Calcul de la taille en octets en fonction du type de données
+        sample_size = {'int32': 4, 'int64': 8, 'float32': 4, 'float64': 8, 'str': 1}[data_type]
+        data_size_in_bytes = num_samples * sample_size
+
         # Création de l'objet Data
         data_id = f"test_{data_type}"
-        data_store = Data(data_id=data_id, data_type="SIGNAL", data_name=f"test_{data_type}", data_size=num_samples,
+        data_store = Data(data_id=data_id, data_type="SIGNAL", data_name=f"test_{data_type}",
+                          data_size_in_bytes=data_size_in_bytes, num_samples=num_samples,
                           in_file=False, sample_type=data_type)
 
         # Vérification de la méthode _get_sample_format_and_size
@@ -319,14 +328,59 @@ def test_data_methods():
 
     print("---- Fin des tests des méthodes de la classe Data ----")
 
+def check_memory_leaks():
+    """
+    Teste les fuites de mémoire pour différents types de données en utilisant tracemalloc.
+    """
+    # Démarrer le suivi de la mémoire
+    tracemalloc.start()
+
+    try:
+        print("\n--- Démarrage des tests de fuites de mémoire ---")
+
+        # Liste des types de données à tester, incluant 'str'
+        data_types = ['int32', 'int64', 'float32', 'float64', 'str']
+
+        # Différentes tailles d'échantillons et tailles de chunk à tester
+        for data_type in data_types:
+            for num_samples in [1000, 10000, 100000]:
+                for chunk_size in [10, 100, 1000]:
+                    # Test avec stockage en RAM
+                    print(f"\nTest mémoire pour {data_type}, {num_samples} samples, chunk_size {chunk_size} (RAM)")
+                    test_data_storage(data_type, num_samples, chunk_size, use_file=False)
+
+                    # Test avec stockage en fichier
+                    print(f"Test mémoire pour {data_type}, {num_samples} samples, chunk_size {chunk_size} (Fichier)")
+                    test_data_storage(data_type, num_samples, chunk_size, use_file=True)
+
+        # Prendre un snapshot de la mémoire après les tests
+        snapshot = tracemalloc.take_snapshot()
+
+        # Statistiques des allocations de mémoire par ligne de code
+        stats = snapshot.statistics('lineno')
+
+        # Affichage des 10 plus grandes sources d'allocation de mémoire
+        print("\n--- Statistiques des 10 plus grandes allocations de mémoire ---")
+        for stat in stats[:10]:
+            print(stat)
+
+    finally:
+        # Arrêter le suivi de la mémoire
+        tracemalloc.stop()
+        print("\n--- Fin des tests de fuites de mémoire ---")
 
 def test_data_storage(data_type, num_samples, chunk_size, use_file):
     """ Teste le stockage et la restitution des données. """
     print(f"Testing {data_type} with {num_samples} samples and chunk size {chunk_size} (file storage: {use_file})")
 
+    # Calcul de la taille en octets en fonction du type de données
+    sample_size = {'int32': 4, 'int64': 8, 'float32': 4, 'float64': 8, 'str': 1}[data_type]
+    data_size_in_bytes = num_samples * sample_size
+
     data_id = f"test_{data_type}"
     sample_type = data_type
-    data_store = Data(data_id=data_id, data_type="SIGNAL", data_name=f"test_{data_type}", data_size=num_samples,
+    data_store = Data(data_id=data_id, data_type="SIGNAL", data_name=f"test_{data_type}",
+                      data_size_in_bytes=data_size_in_bytes, num_samples=num_samples,
                       in_file=use_file, sample_type=sample_type)
 
     folder = "./test_files" if use_file else None
@@ -361,58 +415,34 @@ def test_data_storage(data_type, num_samples, chunk_size, use_file):
     elif np.issubdtype(original_data.dtype, np.floating):
         if np.allclose(original_data, data_read, rtol=1e-6, atol=1e-9):
             print(f"Data match for {data_type} (file: {use_file})")
-        else:
-            print(f"Data mismatch for {data_type} (file: {use_file})")
-    else:
-        if np.array_equal(original_data, data_read):
-            print(f"Data match for {data_type} (file: {use_file})")
-        else:
-            print(f"Data mismatch for {data_type} (file: {use_file})")
 
-    # Vérification de l'existence du fichier
-    if use_file:
-        if os.path.exists(f"{folder}/{data_id}.dat"):
-            print(f"File created successfully for {data_type}")
-        else:
-            print(f"File not created for {data_type}")
-
-    # Suppression des données
-    data_store.delete_data()
-
-    if use_file:
-        if not os.path.exists(f"{folder}/{data_id}.dat"):
-            print(f"File deleted successfully for {data_type}")
-        else:
-            print(f"File not deleted for {data_type}")
-
-
-def check_memory_leaks():
+def analyze_memory_leaks():
+    """
+    Analyse les fuites de mémoire en comparant les snapshots avant et après certaines opérations.
+    """
     tracemalloc.start()
 
-    try:
-        # Tester les différents types de données, incluant 'str'
-        for data_type in ['int32', 'int64', 'float32', 'float64', 'str']:
-            for num_samples in [1000, 10000, 100000]:
-                for chunk_size in [10, 100, 1000]:
-                    # Test avec stockage en RAM
-                    test_data_storage(data_type, num_samples, chunk_size, use_file=False)
-                    # Test avec stockage en fichier
-                    test_data_storage(data_type, num_samples, chunk_size, use_file=True)
+    # Capture du snapshot avant les opérations
+    snapshot_before = tracemalloc.take_snapshot()
 
-    finally:
-        snapshot = tracemalloc.take_snapshot()
-        stats = snapshot.statistics('lineno')
+    # Effectuer des opérations, comme des tests de stockage et de suppression
+    test_data_methods()
 
-        # Affichage des 10 plus grandes sources d'allocation de mémoire
-        print("\n--- Memory Allocation Statistics ---")
-        for stat in stats[:10]:
-            print(stat)
+    # Capture du snapshot après les opérations
+    snapshot_after = tracemalloc.take_snapshot()
 
-        tracemalloc.stop()
+    # Comparer les snapshots pour détecter les différences
+    stats = snapshot_after.compare_to(snapshot_before, 'lineno')
 
+    print("\n--- Comparaison des snapshots mémoire ---")
+    for stat in stats[:10]:
+        print(stat)
+
+    tracemalloc.stop()
 
 if __name__ == "__main__":
-    # Tester les méthodes de la classe Data
     test_data_methods()
-    # Tester les fuites de mémoire
+
+    # Test avec différents types de données et stockage en fichier ou en RAM
     check_memory_leaks()
+    analyze_memory_leaks()
