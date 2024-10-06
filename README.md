@@ -1,159 +1,134 @@
 # PyDataCore
 A basic library that can manage signalprocessing data as a datapool ,it handles asynchronuous acces and chunk stream as well as direct ram storage 
-# Classe Data
-La classe Data dans la bibliothèque PyDataCore permet de stocker et de lire des données efficacement, que ce soit en mémoire (RAM) ou dans un fichier sur disque. Elle est spécialement conçue pour gérer des données volumineuses en les stockant et en les récupérant sous forme de chunks afin de ne pas surcharger la mémoire.
 
-Méthodes :
-    
-    def __init__(self, data_id, data_type, data_name, data_size, data_is_in_file=False, sample_type='float'):
+## Data Class
 
-initialise une instance de données.
+The `Data` class is designed to manage data storage and retrieval for various types of data (e.g., `int32`, `int64`, `float32`, `float64`, `str`). It allows for storing data in either memory (RAM) or a file on disk, and offers methods for reading, writing, and converting data between RAM and file-based storage.
 
-:param data_id: 
+### Features
+- Support for multiple data types: `int32`, `int64`, `float32`, `float64`, `str`
+- Ability to store data in RAM or in files
+- Chunk-based reading and writing for large datasets
+- Support for overlapping chunks when reading data
+- Conversion between RAM and file-based storage
+- Memory management, including cleanup and data deletion
 
-identifiant unique de données.
+### Class Definition
 
-:param data_type: 
+#### Initialization
+```python
+def __init__(self, data_id, data_type, data_name, data_size_in_bytes, num_samples, in_file=False, sample_type='float'):
+```
+- **data_id**: Unique identifier for the data.
+- **data_type**: Type of data (e.g., "temporal", "freq", etc.).
+- **data_name**: Name of the data.
+- **data_size_in_bytes**: Size of the data in bytes.
+- **num_samples**: Number of samples in the data.
+- **in_file**: Boolean indicating if the data is stored in a file or in memory.
+- **sample_type**: Type of the data samples (`float32`, `float64`, `int32`, `int64`, `str`).
 
-type de données (par exemple, temporal,freq, etc.). le type de données est laissé libre dans cette classe.
+#### Methods
 
-:param data_name: 
+##### `_get_sample_format_and_size`
+```python
+def _get_sample_format_and_size(self, sample_type)
+```
+Returns the format (struct) and size in bytes for a given sample type.
 
-nom des données.
+##### `store_data_from_data_generator`
+```python
+def store_data_from_data_generator(self, data_generator, folder=None)
+```
+Stores data chunk by chunk from a data generator. The data can be stored in RAM or in a file (if `in_file=True`).
 
-:param data_size: 
+##### `store_data_from_object`
+```python
+def store_data_from_object(self, data_object, folder=None)
+```
+Stores data directly from a data object (e.g., list, numpy array). Can store in RAM or in a file.
 
-taille des données.
+##### `read_chunked_data`
+```python
+def read_chunked_data(self, chunk_size=1024)
+```
+Reads the data chunk by chunk. If stored in a file, reads from the file; otherwise, reads from RAM.
 
-:param data_is_in_file: 
+##### `read_overlapped_chunked_data`
+```python
+def read_overlapped_chunked_data(self, chunk_size=1024, overlap=0)
+```
+Reads the data chunk by chunk with overlap. Supports overlapping chunks to read portions of data multiple times.
 
-indique si les données sont stockées dans un fichier ou en mémoire.
+##### `read_data`
+```python
+def read_data(self)
+```
+Reads all the data, either from RAM or from a file.
 
-:param sample_type: 
+##### `delete_data`
+```python
+def delete_data(self)
+```
+Deletes the data, either from RAM or by deleting the file from disk.
 
-type de données (float32, float64, int32, int64). format str non supporté.
+##### `convert_ram_to_file`
+```python
+def convert_ram_to_file(self, folder)
+```
+Converts the data stored in RAM into a file and clears the data from RAM.
 
-        
-    def _get_sample_format_and_size(self, sample_type):
+##### `convert_file_to_ram`
+```python
+def convert_file_to_ram(self)
+```
+Converts the data stored in a file back into RAM.
 
-Retourne le format struct et la taille en octets en fonction du type de sample.
+### Usage Examples
 
-:param sample_type:
+#### Example 1: Storing Data in RAM
+```python
+data_store = Data(data_id="test_int32", data_type="SIGNAL", data_name="test_data", 
+                  data_size_in_bytes=4000, num_samples=1000, in_file=False, sample_type="int32")
 
-Le type de données (float32, float64, int32, int64).
+data_gen = data_generator("int32", 1000, 100)
+data_store.store_data_from_data_generator(data_gen)
 
-:return:
+## Reading data in chunks
+for chunk in data_store.read_chunked_data(chunk_size=100):
+    print(chunk)
 
-taille en octets.
-   
-    def read_data(self, chunk_size=1024):
-    
-Générateur qui lit les données chunk par chunk, soit depuis la RAM, soit depuis un fichier.
+## Delete data
+data_store.delete_data()
+```
 
-:param chunk_size: 
+#### Example 2: Storing Data in a File
+```python
+data_store = Data(data_id="test_float64", data_type="SIGNAL", data_name="test_data", 
+                  data_size_in_bytes=8000, num_samples=1000, in_file=True, sample_type="float64")
 
-Nombre de samples par chunk pour la lecture de fichiers.
+data_gen = data_generator("float64", 1000, 100)
+data_store.store_data_from_data_generator(data_gen, folder="./data_files")
 
-:yield: 
+## Convert back to RAM
+data_store.convert_file_to_ram()
 
-Un chunk de données à la fois.
+## Delete data
+data_store.delete_data()
+```
 
+#### Example 3: Reading Data with Overlapping Chunks
+```python
+data_store = Data(data_id="test_str", data_type="SIGNAL", data_name="test_data", 
+                  data_size_in_bytes=1000, num_samples=1000, in_file=False, sample_type="str")
 
-    def delete_data(self):
-Supprime les données, soit en RAM, soit en supprimant le fichier sur le disque.
-        
-Exemple d'utilisation :
+data_gen = data_generator("str", 1000, 100)
+data_store.store_data_from_data_generator(data_gen)
 
+# Reading data with 50% overlap
+for chunk in data_store.read_overlapped_chunked_data(chunk_size=100, overlap=50):
+    print(chunk)
+```
 
-    data_store = Data(data_id="test_signal", data_type="SIGNAL", data_name="test", data_size=1000, data_is_in_file=True, sample_type='float32')
-    data_store.store_data(data_generator('float32', 1000, 100), folder="./test_files")
-    read_data(chunk_size=1024)
-Lit les données chunk par chunk. Si les données sont stockées en RAM, elles sont lues directement depuis la mémoire. Si elles sont stockées dans un fichier, elles sont lues depuis le fichier.
+### Memory Management
+The class handles memory management and can store large data sets efficiently by allowing conversion between RAM and file-based storage. Use the `delete_data()` method to clear data when it is no longer needed.
 
-chunk_size (int) : Nombre de samples par chunk lors de la lecture.
-
-Exemple d'utilisation :
-
-    for chunk in data_store.read_data(chunk_size=100):
-        print("Chunk:", chunk)
-    delete_data()
-Supprime les données, soit de la RAM, soit du disque si elles sont stockées dans un fichier.
-
-Exemple d'utilisation :
-
-    data_store.delete_data()
-    
-Exemple complet d'utilisation
-
-Voici un exemple complet pour montrer comment utiliser la classe Data pour stocker des données, les lire et les comparer aux données d'origine.
-
-    import numpy as np
-    import os
-    from PyDataCore import Data
-
-# Générateur de données pour différents types
-
-    def data_generator(data_type, num_samples, chunk_size):
-        if data_type == 'int32':
-            data = np.arange(0, num_samples, dtype=np.int32)
-        
-        elif data_type == 'int64':
-            data = np.arange(0, num_samples, dtype=np.int64)
-        
-        elif data_type == 'float32':
-            data = np.arange(0, num_samples, dtype=np.float32) * 1.1
-       
-        elif data_type == 'float64':
-            data = np.arange(0, num_samples, dtype=np.float64) * 1.1
-       
-        else:
-            raise ValueError("Type de données non supporté")
-        
-        for i in range(0, num_samples, chunk_size):
-            yield data[i:i + chunk_size]
-
-# Tester le stockage et la lecture des données
-    def test_data_storage(data_type, num_samples, chunk_size, use_file):
-        print(f"Testing {data_type} with {num_samples} samples and chunk size {chunk_size} (file storage: {use_file})")
-        
-        data_id = f"test_{data_type}"
-        data_store = Data(data_id=data_id, data_type="SIGNAL", data_name=f"test_{data_type}", data_size=num_samples,
-                          data_is_in_file=use_file, sample_type=data_type)
-    
-        folder = "./test_files" if use_file else None
-        if use_file and not os.path.exists(folder):
-            os.makedirs(folder)
-    
-        # Stocker les données
-        data_store.store_data(data_generator(data_type, num_samples, chunk_size), folder=folder)
-    
-        # Lire les données stockées et vérifier leur correspondance avec les données d'origine
-        data_read = []
-        for chunk in data_store.read_data(chunk_size):
-            data_read.extend(chunk)
-    
-        original_data = np.concatenate([chunk for chunk in data_generator(data_type, num_samples, chunk_size)])
-
-    # Vérification avec une tolérance pour les flottants
-        if np.issubdtype(original_data.dtype, np.floating):
-            if np.allclose(original_data, data_read, rtol=1e-6, atol=1e-9):
-                print(f"Data match for {data_type} (file: {use_file})")
-            else:
-                print(f"Data mismatch for {data_type} (file: {use_file})")
-        else:
-            if np.array_equal(original_data, data_read):
-                print(f"Data match for {data_type} (file: {use_file})")
-            else:
-                print(f"Data mismatch for {data_type} (file: {use_file})")
-
-    # Vérification des fichiers
-        if use_file:
-            if os.path.exists(f"{folder}/{data_id}.dat"):
-                print(f"File created successfully for {data_type}")
-            data_store.delete_data()
-            if not os.path.exists(f"{folder}/{data_id}.dat"):
-                print(f"File deleted successfully for {data_type}")
-
-# Exemple de test
-    test_data_storage('float32', 1000, 100, use_file=True)
-Ce code montre comment créer un générateur de données, les stocker en RAM ou sur le disque, les lire et vérifier leur intégrité en utilisant la classe Data de la bibliothèque PyDataCore.
