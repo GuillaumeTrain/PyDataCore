@@ -133,21 +133,35 @@ class Data:
                     if not chunk:
                         break
 
+                    # Vérifier que le chunk est complet avant de le décompresser
+                    if len(chunk) % self.sample_size != 0:
+                        print(
+                            f"\033[91mWarning: Truncating data! Chunk size {len(chunk)} bytes (expected multiple of {self.sample_size})\033[0m")
+                        break  # On sort de la boucle si le chunk n'est pas complet
+
                     if self.sample_type == 'str':
                         yield chunk.decode('utf-8')  # Décoder les bytes en chaînes de caractères
                     else:
-                        unpacked_chunk = struct.unpack(f'{len(chunk) // self.sample_size}{self.sample_format}', chunk)
-                        yield unpacked_chunk
+                        try:
+                            unpacked_chunk = struct.unpack(f'{len(chunk) // self.sample_size}{self.sample_format}',
+                                                           chunk)
+                            yield unpacked_chunk
+                        except struct.error as e:
+                            print(f"\033[91mError: {e}\033[0m")
+                            break
 
                     f.seek(-int(overlap / 100 * chunk_size * self.sample_size), 1)  # Reculer pour chevauchement
         else:
             for i in range(0, len(self.data), step_size):
+                chunk = self.data[i:i + chunk_size]
+                if len(chunk) < chunk_size:
+                    print(
+                        f"\033[91mWarning: Truncating data in memory! Chunk size {len(chunk)} bytes (expected {chunk_size})\033[0m")
+
                 if self.sample_type == 'str':
-                    # Pour les chaînes de caractères, on retourne une partie de la chaîne avec chevauchement
-                    yield ''.join(self.data[i:i + chunk_size])
+                    yield ''.join(chunk)
                 else:
-                    # Pour les types numériques, on retourne un tableau de données
-                    yield self.data[i:i + chunk_size]
+                    yield chunk
 
     def read_data(self):
         """
