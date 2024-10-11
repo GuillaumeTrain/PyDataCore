@@ -1,134 +1,106 @@
+
 # PyDataCore
-A basic library that can manage signalprocessing data as a datapool ,it handles asynchronuous acces and chunk stream as well as direct ram storage 
 
-## Data Class
+PyDataCore is a data management system designed to handle various types of data efficiently. It provides an organized way to manage large datasets, both in RAM and files, using a `DataPool` that acts as an interface for handling complex data types. PyDataCore supports chunk-based storage and reading, which is ideal for handling large datasets that cannot fit into memory at once.
 
-The `Data` class is designed to manage data storage and retrieval for various types of data (e.g., `int32`, `int64`, `float32`, `float64`, `str`). It allows for storing data in either memory (RAM) or a file on disk, and offers methods for reading, writing, and converting data between RAM and file-based storage.
+## Key Components
 
-### Features
-- Support for multiple data types: `int32`, `int64`, `float32`, `float64`, `str`
-- Ability to store data in RAM or in files
-- Chunk-based reading and writing for large datasets
-- Support for overlapping chunks when reading data
-- Conversion between RAM and file-based storage
-- Memory management, including cleanup and data deletion
+### Data Classes
 
-### Class Definition
+The core of PyDataCore consists of several data classes, each designed to handle a specific type of data. These classes inherit from the `Data` base class, which provides common methods for managing data storage, reading, and deletion.
 
-#### Initialization
-```python
-def __init__(self, data_id, data_type, data_name, data_size_in_bytes, num_samples, in_file=False, sample_type='float'):
-```
-- **data_id**: Unique identifier for the data.
-- **data_type**: Type of data (e.g., "temporal", "freq", etc.).
-- **data_name**: Name of the data.
-- **data_size_in_bytes**: Size of the data in bytes.
-- **num_samples**: Number of samples in the data.
-- **in_file**: Boolean indicating if the data is stored in a file or in memory.
-- **sample_type**: Type of the data samples (`float32`, `float64`, `int32`, `int64`, `str`).
+#### Data Class Overview:
 
-#### Methods
+- **FilePathListData**: Manages a list of file paths. Can store multiple file paths or a single path.
+- **FolderPathListData**: Manages a list of folder paths. Can store multiple folder paths or a single path.
+- **FileListData**: Manages a list of files. Can store multiple files or a single file.
+- **TemporalSignalData**: Represents a temporal signal with attributes such as time step, unit, and values. This class supports chunked storage and reading.
+- **FreqSignalData**: Represents a frequency signal with attributes like frequency step, unit, timestamp, and values. Supports chunked storage and reading.
+- **FFTSData**: Stores a list of frequency signals (FreqSignalData) representing FFTs of temporal signals. It manages multiple frequency signals, each associated with a timestamp.
+- **ConstantsData**: Manages a list of constant values (e.g., calibration data or fixed parameters).
+- **StrData**: Stores string data, either a single string or a list of strings.
+- **IntsData**: Manages a list of integer values.
+- **FreqLimitsData**: Stores frequency limits, defined by frequency points and levels.
+- **TempLimitsData**: Stores temporal limits, defined by time points and levels.
 
-##### `_get_sample_format_and_size`
-```python
-def _get_sample_format_and_size(self, sample_type)
-```
-Returns the format (struct) and size in bytes for a given sample type.
+### ChunkableMixin
 
-##### `store_data_from_data_generator`
-```python
-def store_data_from_data_generator(self, data_generator, folder=None)
-```
-Stores data chunk by chunk from a data generator. The data can be stored in RAM or in a file (if `in_file=True`).
+For data types that support chunk-based operations, PyDataCore provides the `ChunkableMixin` class. This mixin allows for storing and reading data in chunks, which is useful for large datasets that cannot be processed at once.
 
-##### `store_data_from_object`
-```python
-def store_data_from_object(self, data_object, folder=None)
-```
-Stores data directly from a data object (e.g., list, numpy array). Can store in RAM or in a file.
+### FileRamMixin
 
-##### `read_chunked_data`
-```python
-def read_chunked_data(self, chunk_size=1024)
-```
-Reads the data chunk by chunk. If stored in a file, reads from the file; otherwise, reads from RAM.
+For data types that can switch between RAM and file storage, the `FileRamMixin` provides methods to convert data from RAM to a file and vice versa. This is particularly useful when managing memory constraints for large datasets.
 
-##### `read_overlapped_chunked_data`
-```python
-def read_overlapped_chunked_data(self, chunk_size=1024, overlap=0)
-```
-Reads the data chunk by chunk with overlap. Supports overlapping chunks to read portions of data multiple times.
+## The DataPool Interface
 
-##### `read_data`
-```python
-def read_data(self)
-```
-Reads all the data, either from RAM or from a file.
+`DataPool` serves as the central registry for all data objects. It acts as the interface through which users interact with the various data classes, ensuring efficient management and tracking of data. 
 
-##### `delete_data`
-```python
-def delete_data(self)
-```
-Deletes the data, either from RAM or by deleting the file from disk.
+### Key Features of DataPool:
+- **Centralized Management**: `DataPool` provides a registry to manage and keep track of all data objects.
+- **Data Locking**: Prevents concurrent access to data while it's being written or read.
+- **Subscribers**: Allows multiple subscribers to read and acknowledge data, ensuring that data is only released or deleted once all subscribers have processed it.
+- **Data Storage**: Supports both RAM and file storage options for data objects. Users can convert data between RAM and file storage depending on their needs.
 
-##### `convert_ram_to_file`
-```python
-def convert_ram_to_file(self, folder)
-```
-Converts the data stored in RAM into a file and clears the data from RAM.
+### How to Use DataPool
 
-##### `convert_file_to_ram`
-```python
-def convert_file_to_ram(self)
-```
-Converts the data stored in a file back into RAM.
+To ensure proper management and access control, users should always interact with data via the `DataPool`. Direct manipulation of `Data` objects is discouraged, as `DataPool` ensures locking, protection, and cleanup of data through its registry system.
 
-### Usage Examples
+Here’s an example workflow using `DataPool`:
 
-#### Example 1: Storing Data in RAM
-```python
-data_store = Data(data_id="test_int32", data_type="SIGNAL", data_name="test_data", 
-                  data_size_in_bytes=4000, num_samples=1000, in_file=False, sample_type="int32")
+1. **Register Data**:
+   - Register a new data object in the `DataPool` by specifying its type, name, and source ID.
+   ```python
+   pool = DataPool()
+   data_id = pool.register_data(data_type=Data_Type.TEMPORAL_SIGNAL, data_name="Signal1", source_id="Source1", in_file=False)
+   ```
 
-data_gen = data_generator("int32", 1000, 100)
-data_store.store_data_from_data_generator(data_gen)
+2. **Store Data**:
+   - Store data in the `DataPool`, ensuring that the correct source is providing the data and that the data is locked during the process.
+   ```python
+   signal_data = [0.1, 0.2, 0.3, 0.4]  # Example signal data
+   pool.store_data(data_id, data_source=signal_data, source_id="Source1")
+   ```
 
-## Reading data in chunks
-for chunk in data_store.read_chunked_data(chunk_size=100):
-    print(chunk)
+3. **Read Data**:
+   - Retrieve the stored data from the `DataPool` after it has been successfully stored.
+   ```python
+   retrieved_data = pool.get_data(data_id, subscriber_id="Subscriber1")
+   ```
 
-## Delete data
-data_store.delete_data()
+4. **Chunked Data Access**:
+   - If dealing with large datasets, use chunked reading to process data in smaller segments.
+   ```python
+   for chunk in pool.get_chunk_generator(data_id, chunk_size=1024, subscriber_id="Subscriber1"):
+       print(chunk)
+   ```
+
+5. **Convert Data Storage**:
+   - Convert data between RAM and file storage based on available resources and requirements.
+   ```python
+   pool.convert_data_to_file(data_id, folder="./data")
+   pool.convert_data_to_ram(data_id)
+   ```
+
+6. **Delete Data**:
+   - Remove data from the `DataPool` after ensuring that all subscribers have acknowledged the data.
+   ```python
+   pool.delete_data(data_id)
+   ```
+
+## Installation
+
+To install PyDataCore, simply clone the repository and run the setup script:
+
+```bash
+git clone https://github.com/your-repo/PyDataCore.git
+cd PyDataCore
+python setup.py install
 ```
 
-#### Example 2: Storing Data in a File
-```python
-data_store = Data(data_id="test_float64", data_type="SIGNAL", data_name="test_data", 
-                  data_size_in_bytes=8000, num_samples=1000, in_file=True, sample_type="float64")
+## Contributing
 
-data_gen = data_generator("float64", 1000, 100)
-data_store.store_data_from_data_generator(data_gen, folder="./data_files")
+If you would like to contribute to PyDataCore, feel free to submit issues or pull requests on the project's GitHub repository.
 
-## Convert back to RAM
-data_store.convert_file_to_ram()
+## License
 
-## Delete data
-data_store.delete_data()
-```
-
-#### Example 3: Reading Data with Overlapping Chunks
-```python
-data_store = Data(data_id="test_str", data_type="SIGNAL", data_name="test_data", 
-                  data_size_in_bytes=1000, num_samples=1000, in_file=False, sample_type="str")
-
-data_gen = data_generator("str", 1000, 100)
-data_store.store_data_from_data_generator(data_gen)
-
-# Reading data with 50% overlap
-for chunk in data_store.read_overlapped_chunked_data(chunk_size=100, overlap=50):
-    print(chunk)
-```
-
-### Memory Management
-The class handles memory management and can store large data sets efficiently by allowing conversion between RAM and file-based storage. Use the `delete_data()` method to clear data when it is no longer needed.
-
+PyDataCore is licensed under the MIT License.
