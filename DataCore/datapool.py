@@ -1,29 +1,13 @@
+import hashlib
 import numpy as np
-import pandas as pd
 from enum import Enum
-from uuid import uuid4
-import os
-
-from PySide6.scripts.project import is_python_file
-from tabulate import tabulate
-
-from data import Data, data_generator
-
-
-class Data_Type(Enum):
-    PATHS = 0
-    TEMPORAL_SIGNAL = 1
-    FREQ_SIGNAL = 2
-    FREQ_LIMITS = 3
-    TEMP_LIMITS = 4
-    FFT_STREAM = 5
-    CONSTANT = 6
-
-
 import os
 import pandas as pd
 from uuid import uuid4
-from data import Data
+import psutil
+from tabulate import tabulate
+from data import Data, data_generator, Data_Type, FilePathListData, FolderPathListData, FileListData, \
+    TemporalSignalData, FreqSignalData, FFTSData, ConstantsData, StrData, IntsData, FreqLimitsData, TempLimitsData
 
 
 class DataPool:
@@ -47,37 +31,72 @@ class DataPool:
         """ Génère un identifiant unique pour une nouvelle donnée """
         return str(uuid4())
 
-    def add_data(self, data_type, data_name, source_id, protected=False, storage_type='ram'):
+    def register_data(self, data_type, data_name, source_id, protected=False, in_file=False):
         """
-        Ajoute une nouvelle donnée au DataPool et l'associe à une source.
+        Enregistre une nouvelle donnée dans le DataPool et l'associe à une source.
 
-        :param data_type: Le type de la donnée (utilise Data_Type)
+        :param data_type: Type de la donnée (ex. Data_Type)
         :param data_name: Nom de la donnée
-        :param source_id: ID de la source (un seul pour chaque donnée)
-        :param protected: Si la donnée est protégée contre l'effacement
-        :param storage_type: 'ram' ou 'file' pour spécifier le type de stockage
-        :return: L'ID unique de la donnée
+        :param source_id: ID de la source associée à cette donnée
+        :param protected: True si la donnée est protégée contre la suppression
+        :param in_file: Si True, la donnée sera stockée dans un fichier. Si False, elle sera stockée en RAM.
+        :return: L'ID unique de la donnée créée
         """
         data_id = self.generate_unique_id()
 
-        # Ajouter à data_registry
-        new_data = {
+        # Déterminer le type de stockage : 'ram' ou 'file'
+        storage_type = 'file' if in_file else 'ram'
+
+        # Mapping des types de données vers les classes correspondantes
+        data_class_mapping = {
+            Data_Type.FILE_PATHS: FilePathListData,
+            Data_Type.FOLDER_PATHS: FolderPathListData,
+            Data_Type.FILE_LIST: FileListData,
+            Data_Type.TEMPORAL_SIGNAL: TemporalSignalData,
+            Data_Type.FREQ_SIGNAL: FreqSignalData,
+            Data_Type.FFTS: FFTSData,
+            Data_Type.CONSTANTS: ConstantsData,
+            Data_Type.STR: StrData,
+            Data_Type.INTS: IntsData,
+            Data_Type.FREQ_LIMITS: FreqLimitsData,
+            Data_Type.TEMP_LIMITS: TempLimitsData,
+        }
+
+        # Créer une instance de la classe correspondant à data_type
+        data_class = data_class_mapping.get(data_type)
+        if not data_class:
+            raise ValueError(f"Data type {data_type} is not supported.")
+
+        # Instanciation de la classe de donnée
+        data_size_in_bytes = 0  # Taille par défaut à 0, sera mise à jour lors du stockage
+        number_of_elements = 0  # À ajuster également lors du stockage
+
+        data_obj = data_class(
+            data_id=data_id,
+            data_name=data_name,
+            data_size_in_bytes=data_size_in_bytes,
+            number_of_elements=number_of_elements,
+            in_file=in_file
+        )
+
+        # Ajouter la donnée au registre de données
+        new_data_entry = {
             'data_id': data_id,
             'data_type': data_type,
             'data_name': data_name,
             'storage_type': storage_type,
-            'data_object': None  # Sera défini lors du stockage
+            'data_object': data_obj  # Objet de donnée instancié
         }
-        self.data_registry = pd.concat([self.data_registry, pd.DataFrame([new_data])], ignore_index=True)
+        self.data_registry = pd.concat([self.data_registry, pd.DataFrame([new_data_entry])], ignore_index=True)
 
-        # Ajouter à source_to_data
-        source_mapping = {
+        # Ajouter la donnée au registre source_to_data
+        source_entry = {
             'source_id': source_id,
             'data_id': data_id,
-            'locked': True,  # Verrouillé jusqu'à ce que l'écriture soit terminée
+            'locked': True,  # Verrouiller pendant la phase d'écriture
             'protected': protected
         }
-        self.source_to_data = pd.concat([self.source_to_data, pd.DataFrame([source_mapping])], ignore_index=True)
+        self.source_to_data = pd.concat([self.source_to_data, pd.DataFrame([source_entry])], ignore_index=True)
 
         return data_id
 
@@ -100,7 +119,7 @@ class DataPool:
         for index, row in self.subscriber_to_data.iterrows():
             if row['data_id'] == data_id and row['subscriber_id'] == subscriber_id:
                 # Incrémenter l'acquittement pour ce subscriber
-                self.subscriber_to_data.at[index, 'acquitements'] += 1
+                self.subscriber_to_data.at[index, 'acquitements'] = True
                 break
         else:
             raise ValueError(f"Subscriber {subscriber_id} not found for data {data_id}")
@@ -111,11 +130,14 @@ class DataPool:
 
     def _all_subscribers_acknowledged(self, data_id):
         # Vérifier si tous les subscribers ont acquitté
-        total_subscribers = self.subscriber_to_data[self.subscriber_to_data['data_id'] == data_id].shape[0]
-        acquitted_subscribers = self.subscriber_to_data[
-            (self.subscriber_to_data['data_id'] == data_id) & (self.subscriber_to_data['acquitements'] > 0)].shape[0]
+        #récupérer une liste de tous les subscribers pour la donnée contenant les acquittements
+        subscribers = self.subscriber_to_data[self.subscriber_to_data['data_id'] == data_id]
+        print(f"subscribers : {subscribers}")
+        #faire une fonction logique et entre tous les acquittements
+        acquittements = subscribers['acquitements']
+        is_all_acquitted = acquittements.all()
 
-        return total_subscribers == acquitted_subscribers
+        return is_all_acquitted
 
     def _release_data(self, data_id):
         # Vérification si la donnée existe dans le registre
@@ -143,25 +165,6 @@ class DataPool:
         else:
             raise ValueError(f"Data {data_id} not found for release")
 
-    # def acknowledge_data(self, data_id, subscriber_id):
-    #     if data_id not in self.data_registry:
-    #         raise ValueError(f"Data {data_id} not found in registry")
-    #
-    #     data_entry = self.data_registry.loc[self.data_registry['data_id'] == data_id]
-    #     if data_entry.empty:
-    #         raise ValueError(f"Data {data_id} not found in the pool")
-    #
-    #     # Vérification de la présence du subscriber avant de l'acquitter
-    #     if subscriber_id not in self.subscribers.get(data_id, []):
-    #         raise ValueError(f"Subscriber {subscriber_id} not found for data {data_id}")
-    #
-    #     self.subscribers[data_id].remove(subscriber_id)
-    #
-    #     # Si tous les subscribers ont acquitté, libérer les ressources
-    #     if not self.subscribers[data_id]:
-    #         del self.subscribers[data_id]
-    #         print(f"All subscribers have acknowledged data {data_id}. Data can be deleted or kept based on policy.")
-
     def lock_data(self, data_id):
         """Verrouille la donnée pour prévenir l'accès pendant l'écriture."""
         self.source_to_data.loc[self.source_to_data['data_id'] == data_id, 'locked'] = True
@@ -170,54 +173,68 @@ class DataPool:
         """Déverrouille la donnée après écriture."""
         self.source_to_data.loc[self.source_to_data['data_id'] == data_id, 'locked'] = False
 
-    def store_data(self, data_id, data_source, folder=None):
+    def store_data(self, data_id, data_source, source_id, folder=None):
         """
-        Stocke la donnée soit en RAM, soit sur disque en utilisant la classe Data.
-        Si data_source est une liste ou un tableau, elle sera stockée en RAM. Si c'est un générateur, elle sera stockée en chunks.
+        Stocke la donnée dans le DataPool en vérifiant les définitions de la donnée et son type de stockage.
 
         :param data_id: L'ID unique de la donnée dans le DataPool.
-        :param data_source: Soit un générateur de chunks de données, soit une variable contenant les données en RAM.
-        :param folder: Dossier où stocker le fichier si nécessaire.
+        :param data_source: Source des données (liste, tableau ou générateur).
+        :param source_id: ID de la source qui donne la donnée.
+        :param folder: Dossier où stocker le fichier si nécessaire (pour les données en fichier).
         """
-        # Récupération de la ligne correspondante dans data_registry
-        data_row = self.data_registry[self.data_registry['data_id'] == data_id].iloc[0]
-        storage_type = data_row['storage_type']
+        # Vérifier que la donnée existe dans le registre
+        data_row = self.data_registry[self.data_registry['data_id'] == data_id]
+        if data_row.empty:
+            raise ValueError(f"Data {data_id} not found in registry")
 
-        # Si le data_source est un générateur, on ne peut pas utiliser len(data_source)
-        if hasattr(data_source, '__len__'):
-            data_size_in_bytes = len(
-                data_source) * 4  # Taille estimée des données, modifiable selon les types de données
-            num_samples = len(data_source)
+        # Vérifier que la source est bien celle qui a enregistré la donnée
+        source_row = self.source_to_data[self.source_to_data['data_id'] == data_id]
+        if source_row.empty or source_row['source_id'].values[0] != source_id:
+            raise PermissionError(f"Source {source_id} is not authorized to store data for {data_id}")
+
+        # Vérifier que la donnée est verrouillée avant de la stocker
+        if not source_row['locked'].values[0]:
+            raise PermissionError(f"Data {data_id} is not locked and cannot be stored")
+
+        # Récupérer l'objet Data correspondant à cette donnée
+        data_obj = data_row['data_object'].values[0]
+
+        # Vérifier si le type de donnée est compatible avec le data_source
+        if isinstance(data_obj, (list, np.ndarray)):
+            data_size_in_bytes = len(data_source) * data_obj.sample_size  # Taille estimée des données
+            number_of_elements = len(data_source)
         else:
-            data_size_in_bytes = None  # On ne connaît pas à l'avance la taille des générateurs
-            num_samples = None
+            data_size_in_bytes = None  # Pour les générateurs, ne pas calculer la taille
+            number_of_elements = None
 
-        # Créer un objet Data correspondant à cette donnée
-        data_obj = Data(
-            data_id=data_id,
-            data_type=data_row['data_type'],
-            data_name=data_row['data_name'],
-            data_size_in_bytes=data_size_in_bytes if data_size_in_bytes is not None else 0,
-            num_samples=num_samples if num_samples is not None else 0,
-            in_file=(storage_type == 'file'),
-            sample_type='float32'  # Exemple, modifiable selon le type de données
-        )
+        # Vérifier les définitions requises
+        if isinstance(data_obj, TemporalSignalData) or isinstance(data_obj, FreqSignalData):
+            if data_obj.dt is None or data_obj.unit is None:
+                raise ValueError(f"Data {data_id} is missing required definitions (time_step/freq_step, unit)")
 
-        # Si le stockage est en fichier, vérifier que le dossier est fourni
-        if storage_type == 'file':
+        # Stocker les données en RAM ou en fichier selon le type
+        if data_obj.in_file:
             if folder is None:
-                raise ValueError("Folder must be specified for file-based storage.")
-            # Utilisation de store_data_from_data_generator pour un générateur ou store_data_from_object pour des données RAM
+                raise ValueError("Folder must be specified for file-based storage")
             if isinstance(data_source, (list, np.ndarray)):
                 data_obj.store_data_from_object(data_source, folder=folder)
             else:
                 data_obj.store_data_from_data_generator(data_source, folder=folder)
         else:
-            # Si les données sont stockées en RAM
-            data_obj.store_data_from_object(data_source)
+            if isinstance(data_source, (list, np.ndarray)):
+                data_obj.store_data_from_object(data_source)
+            else:
+                data_obj.store_data_from_data_generator(data_source)
 
-        # Mise à jour de la référence à l'objet Data dans data_registry
+        # Mettre à jour la taille et le nombre d'éléments de la donnée après stockage
+        data_obj.data_size_in_bytes = data_size_in_bytes if data_size_in_bytes is not None else 0
+        data_obj.num_samples = number_of_elements if number_of_elements is not None else 0
+
+        # Mise à jour de l'objet dans le registre
         self.data_registry.loc[self.data_registry['data_id'] == data_id, 'data_object'] = data_obj
+
+        # Déverrouiller la donnée après le stockage
+        self.unlock_data(data_id)
 
     def delete_data(self, data_id):
         """Supprime la donnée si elle n'est pas protégée et que tous les acquittements sont reçus."""
@@ -257,7 +274,7 @@ class DataPool:
         # Si la donnée n'est pas verrouillée, renvoyer ses informations
         return self.data_registry.loc[self.data_registry['data_id'] == data_id]
 
-    def read_data(self, data_id, subscriber_id):
+    def get_data(self, data_id, subscriber_id):
         """
         Permet à un subscriber de lire les données complètes.
         Prend en compte le verrouillage de la donnée et gère l'acquittement après lecture.
@@ -266,19 +283,20 @@ class DataPool:
         :param subscriber_id: L'ID du subscriber qui lit les données.
         :return: Les données complètes si disponibles.
         """
+        data = None
         # Vérifier si la donnée est verrouillée
         is_locked = self.source_to_data.loc[self.source_to_data['data_id'] == data_id, 'locked'].values[0]
         if is_locked:
             raise PermissionError(f"Data {data_id} is locked and cannot be read.")
-
-        # Récupérer l'objet Data
+        #verifier si le subscriber est autorisé à lire la donnée
+        if subscriber_id not in self.subscriber_to_data.loc[
+            self.subscriber_to_data['data_id'] == data_id, 'subscriber_id'].values:
+            raise PermissionError(f"Subscriber {subscriber_id} is not authorized to read data {data_id}")
+        #vérifier si la donnée est sous forme de fichier
         data_obj = self.data_registry.loc[self.data_registry['data_id'] == data_id, 'data_object'].values[0]
-
         if data_obj is None:
             raise ValueError(f"Data {data_id} has not been stored yet.")
-
-        # Lire les données depuis l'objet Data
-        data = data_obj.read_data()
+        data = data_obj.read_data()  #la méthode read_data() de la classe Data gère le cas de fichier ou de RAM
 
         # Acquitter la donnée après la lecture
         self.acknowledge_data(data_id, subscriber_id)
@@ -300,9 +318,17 @@ class DataPool:
         if source_row['locked'].values[0]:
             raise ValueError(f"Data with ID {data_id} is locked and cannot be read.")
 
+        # Vérifier si la donnée est verrouillée
+        is_locked = self.source_to_data.loc[self.source_to_data['data_id'] == data_id, 'locked'].values[0]
+        if is_locked:
+            raise PermissionError(f"Data {data_id} is locked and cannot be read.")
+        # verifier si le subscriber est autorisé à lire la donnée
+        if subscriber_id not in self.subscriber_to_data.loc[
+            self.subscriber_to_data['data_id'] == data_id, 'subscriber_id'].values:
+            raise PermissionError(f"Subscriber {subscriber_id} is not authorized to read data {data_id}")
+
         # Récupérer l'objet Data à partir de data_registry
         data_obj = self.data_registry.loc[self.data_registry['data_id'] == data_id, 'data_object'].values[0]
-
         # Lire les données via la méthode de la classe Data (chunk par chunk sans chevauchement)
         chunked_data = data_obj.read_chunked_data(chunk_size=chunk_size)
 
@@ -348,6 +374,61 @@ class DataPool:
         if subscriber_id is not None:
             self.acknowledge_data(data_id, subscriber_id)
 
+    def convert_data_to_ram(self, data_id):
+        """
+        Convertit les données stockées dans un fichier en RAM, en agrégeant tous les chunks si les données sont sous forme de générateur.
+
+        :param data_id: L'ID unique de la donnée dans le DataPool.
+        """
+        # locker la donnée pour éviter les accès concurrents
+        self.lock_data(data_id)
+        # Récupérer l'objet Data à partir du data_registry
+        data_row = self.data_registry[self.data_registry['data_id'] == data_id].iloc[0]
+        data_obj = data_row['data_object']
+
+        if data_obj.in_file and data_obj.file_path:
+            print(f"Conversion des données de fichier vers RAM pour {data_id}...")
+
+            # Si les données sont dans un fichier, les lire en une seule fois
+            data_obj.convert_file_to_ram()
+
+            # Mise à jour du type de stockage
+            self.data_registry.loc[self.data_registry['data_id'] == data_id, 'storage_type'] = 'ram'
+            print(f"Les données {data_id} sont maintenant en RAM.")
+        else:
+            print(f"Les données {data_id} sont déjà en RAM ou le fichier est manquant.")
+        #unlocker la donnée après la conversion
+        self.unlock_data(data_id)
+
+    def convert_data_to_file(self, data_id, folder=None):
+        """
+        Convertit les données stockées en RAM dans un fichier sans passer par des chunks.
+
+        :param data_id: L'ID unique de la donnée dans le DataPool.
+        :param folder: Le dossier où stocker le fichier de données.
+        """
+        # Récupérer l'objet Data à partir du data_registry
+        # locker la donnée pour éviter les accès concurrents
+        self.lock_data(data_id)
+        data_row = self.data_registry[self.data_registry['data_id'] == data_id].iloc[0]
+        data_obj = data_row['data_object']
+
+        if not data_obj.in_file:
+            print(f"Conversion des données de RAM vers fichier pour {data_id}...")
+
+            # Si les données sont en RAM, les convertir en fichier directement
+            if folder is None:
+                raise ValueError("Le dossier où stocker les fichiers doit être spécifié.")
+            data_obj.convert_ram_to_file(folder)
+
+            # Mise à jour du type de stockage
+            self.data_registry.loc[self.data_registry['data_id'] == data_id, 'storage_type'] = 'file'
+            print(f"Les données {data_id} sont maintenant stockées dans un fichier.")
+        else:
+            print(f"Les données {data_id} sont déjà dans un fichier.")
+        #unlocker la donnée après la conversion
+        self.unlock_data(data_id)
+
 
 # Fonctions de test
 def test_locking_mechanism():
@@ -356,7 +437,8 @@ def test_locking_mechanism():
 
     # Ajout d'une donnée verrouillée
     print("\n---- Ajout de la première donnée (verrouillée automatiquement à l'ajout) ----")
-    data_id_1 = pool.add_data(data_type="Data_Type.TEMPORAL_SIGNAL", data_name="Temp_Signal_RAM", source_id="Source_1", storage_type='ram')
+    data_id_1 = pool.register_data(data_type="Data_Type.TEMPORAL_SIGNAL", data_name="Temp_Signal_RAM",
+                                   source_id="Source_1", storage_type='ram')
     print(tabulate(pool.data_registry, headers='keys', tablefmt='pretty'))
     print(tabulate(pool.source_to_data, headers='keys', tablefmt='pretty'))
 
@@ -395,7 +477,8 @@ def test_chunked_read():
 
     # Ajout et stockage d'une donnée dans un fichier
     print("\n---- Ajout et stockage d'une donnée (Fichier) ----")
-    data_id_2 = pool.add_data(data_type="Data_Type.FREQ_SIGNAL", data_name="Freq_Signal_File", source_id="Source_2", storage_type='file')
+    data_id_2 = pool.register_data(data_type="Data_Type.FREQ_SIGNAL", data_name="Freq_Signal_File",
+                                   source_id="Source_2", storage_type='file')
 
     # Générateur de données chunk par chunk
     data_gen = data_generator('float32', 500, 50)  # Générateur pour 500 éléments avec des chunks de taille 50
@@ -427,7 +510,8 @@ def test_overlapped_chunked_read():
 
     # Ajout et stockage d'une donnée dans un fichier
     print("\n---- Ajout et stockage d'une donnée (Fichier) ----")
-    data_id_2 = pool.add_data(data_type="Data_Type.FREQ_SIGNAL", data_name="Freq_Signal_File", source_id="Source_2", storage_type='file')
+    data_id_2 = pool.register_data(data_type="Data_Type.FREQ_SIGNAL", data_name="Freq_Signal_File",
+                                   source_id="Source_2", storage_type='file')
 
     # Générateur de données chunk par chunk
     data_gen = data_generator('float32', 500, 50)  # Générateur de 500 éléments avec des chunks de taille 50
@@ -455,14 +539,14 @@ def test_overlapped_chunked_read():
         print(f"Chunk reçu avec chevauchement : {chunk}")
 
 
-
 def test_acknowledgment():
     print("\n==== Test de la gestion des acquittements ====\n")
     pool = DataPool()
 
     # Ajout et stockage d'une donnée en RAM
     print("\n---- Ajout d'une donnée en RAM ----")
-    data_id_1 = pool.add_data(data_type="Data_Type.TEMPORAL_SIGNAL", data_name="Temp_Signal_RAM", source_id="Source_1", storage_type='ram')
+    data_id_1 = pool.register_data(data_type="Data_Type.TEMPORAL_SIGNAL", data_name="Temp_Signal_RAM",
+                                   source_id="Source_1", storage_type='ram')
     pool.store_data(data_id_1, list(range(1000)))  # Stoker des données exemple
     print("\n---- Après stockage des données ----")
     print(tabulate(pool.data_registry, headers='keys', tablefmt='pretty'))
@@ -492,7 +576,8 @@ def test_datapool_methods():
 
     # Ajout et stockage d'une donnée en RAM
     print("\n---- Ajout de la première donnée (RAM) ----")
-    data_id_1 = pool.add_data(data_type="Data_Type.TEMPORAL_SIGNAL", data_name="Temp_Signal_RAM", source_id="Source_1", storage_type='ram')
+    data_id_1 = pool.register_data(data_type="Data_Type.TEMPORAL_SIGNAL", data_name="Temp_Signal_RAM",
+                                   source_id="Source_1", storage_type='ram')
     print(tabulate(pool.subscriber_to_data, headers='keys', tablefmt='pretty'))
     print(tabulate(pool.data_registry, headers='keys', tablefmt='pretty'))
     print(tabulate(pool.source_to_data, headers='keys', tablefmt='pretty'))
@@ -506,7 +591,8 @@ def test_datapool_methods():
 
     # Ajout et stockage d'une donnée dans un fichier
     print("\n---- Ajout de la deuxième donnée (Fichier) ----")
-    data_id_2 = pool.add_data(data_type="Data_Type.FREQ_SIGNAL", data_name="Freq_Signal_File", source_id="Source_2", storage_type='file')
+    data_id_2 = pool.register_data(data_type="Data_Type.FREQ_SIGNAL", data_name="Freq_Signal_File",
+                                   source_id="Source_2", storage_type='file')
     print(tabulate(pool.subscriber_to_data, headers='keys', tablefmt='pretty'))
     print(tabulate(pool.data_registry, headers='keys', tablefmt='pretty'))
     print(tabulate(pool.source_to_data, headers='keys', tablefmt='pretty'))
@@ -540,13 +626,13 @@ def test_datapool_methods():
     print(tabulate(pool.data_registry, headers='keys', tablefmt='pretty'))
     print(tabulate(pool.source_to_data, headers='keys', tablefmt='pretty'))
 
+
+
 if __name__ == "__main__":
-
     # Appel de la fonction test
-    test_locking_mechanism()
-    test_chunked_read()
-    test_overlapped_chunked_read()
-    test_acknowledgment()
+    # test_locking_mechanism()
+    # test_chunked_read()
+    # test_acknowledgment()
+    test_memory_leak_and_data_integrity_with_large_data()
     # test_datapool_methods()
-
-
+    # test_overlapped_chunked_read()
