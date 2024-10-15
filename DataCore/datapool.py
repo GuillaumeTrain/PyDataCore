@@ -31,7 +31,7 @@ class DataPool:
         """ Génère un identifiant unique pour une nouvelle donnée """
         return str(uuid4())
 
-    def register_data(self, data_type, data_name, source_id, protected=False, in_file=False):
+    def register_data(self, data_type, data_name, source_id, protected=False, in_file=False, **kwargs):
         """
         Enregistre une nouvelle donnée dans le DataPool et l'associe à une source.
 
@@ -40,6 +40,7 @@ class DataPool:
         :param source_id: ID de la source associée à cette donnée
         :param protected: True si la donnée est protégée contre la suppression
         :param in_file: Si True, la donnée sera stockée dans un fichier. Si False, elle sera stockée en RAM.
+        :param kwargs: Paramètres supplémentaires requis par certaines classes de données (ex: time_step, unit)
         :return: L'ID unique de la donnée créée
         """
         data_id = self.generate_unique_id()
@@ -49,40 +50,54 @@ class DataPool:
 
         # Mapping des types de données vers les classes correspondantes
         data_class_mapping = {
-            Data_Type.FILE_PATHS: FilePathListData,
-            Data_Type.FOLDER_PATHS: FolderPathListData,
-            Data_Type.FILE_LIST: FileListData,
-            Data_Type.TEMPORAL_SIGNAL: TemporalSignalData,
-            Data_Type.FREQ_SIGNAL: FreqSignalData,
-            Data_Type.FFTS: FFTSData,
-            Data_Type.CONSTANTS: ConstantsData,
-            Data_Type.STR: StrData,
-            Data_Type.INTS: IntsData,
-            Data_Type.FREQ_LIMITS: FreqLimitsData,
-            Data_Type.TEMP_LIMITS: TempLimitsData,
+            Data_Type.FILE_PATHS.value: FilePathListData,
+            Data_Type.FOLDER_PATHS.value: FolderPathListData,
+            Data_Type.FILE_LIST.value: FileListData,
+            Data_Type.TEMPORAL_SIGNAL.value: TemporalSignalData,
+            Data_Type.FREQ_SIGNAL.value: FreqSignalData,
+            Data_Type.FFTS.value: FFTSData,
+            Data_Type.CONSTANTS.value: ConstantsData,
+            Data_Type.STR.value: StrData,
+            Data_Type.INTS.value: IntsData,
+            Data_Type.FREQ_LIMITS.value: FreqLimitsData,
+            Data_Type.TEMP_LIMITS.value: TempLimitsData,
         }
 
-        # Créer une instance de la classe correspondant à data_type
-        data_class = data_class_mapping.get(data_type)
-        if not data_class:
+        # Debugging: print the available data mappings
+        print(f"Available data class mappings: {list(data_class_mapping.keys())}")
+        print(f"Registering data of type: {data_type}")
+
+        # Comparer en utilisant la valeur de l'énumération
+        try:
+            data_class = data_class_mapping[data_type.value]
+            print(f"Instantiating data class: {data_class}")
+        except KeyError:
             raise ValueError(f"Data type {data_type} is not supported.")
 
-        # Instanciation de la classe de donnée
-        data_size_in_bytes = 0  # Taille par défaut à 0, sera mise à jour lors du stockage
-        number_of_elements = 0  # À ajuster également lors du stockage
+        try:
+            # Instanciation de la classe de donnée avec les paramètres optionnels
+            data_size_in_bytes = 0  # Taille par défaut à 0, sera mise à jour lors du stockage
+            number_of_elements = 0  # À ajuster également lors du stockage
 
-        data_obj = data_class(
-            data_id=data_id,
-            data_name=data_name,
-            data_size_in_bytes=data_size_in_bytes,
-            number_of_elements=number_of_elements,
-            in_file=in_file
-        )
+            # Passe les kwargs à l'instanciation
+            data_obj = data_class(
+                data_id=data_id,
+                data_name=data_name,
+                data_size_in_bytes=data_size_in_bytes,
+                number_of_elements=number_of_elements,
+                in_file=in_file,
+                **kwargs  # Transfert des paramètres optionnels (time_step, unit, etc.)
+            )
+
+            print(f"Data object created: {data_obj}")
+
+        except Exception as e:
+            raise ValueError(f"Failed to instantiate data class {data_class} with error: {e}")
 
         # Ajouter la donnée au registre de données
         new_data_entry = {
             'data_id': data_id,
-            'data_type': data_type,
+            'data_type': data_type.name,  # Use the name instead of full enum
             'data_name': data_name,
             'storage_type': storage_type,
             'data_object': data_obj  # Objet de donnée instancié
@@ -430,209 +445,4 @@ class DataPool:
         self.unlock_data(data_id)
 
 
-# Fonctions de test
-def test_locking_mechanism():
-    print("\n==== Test du mécanisme de verrouillage ====\n")
-    pool = DataPool()
 
-    # Ajout d'une donnée verrouillée
-    print("\n---- Ajout de la première donnée (verrouillée automatiquement à l'ajout) ----")
-    data_id_1 = pool.register_data(data_type="Data_Type.TEMPORAL_SIGNAL", data_name="Temp_Signal_RAM",
-                                   source_id="Source_1", storage_type='ram')
-    print(tabulate(pool.data_registry, headers='keys', tablefmt='pretty'))
-    print(tabulate(pool.source_to_data, headers='keys', tablefmt='pretty'))
-
-    # Vérifier que la donnée est bien verrouillée
-    assert pool.source_to_data.loc[pool.source_to_data['data_id'] == data_id_1, 'locked'].values[0] == True
-    print("\n---- Vérification : La donnée est bien verrouillée ----")
-
-    # Tentative de lecture (devrait échouer)
-    try:
-        pool.get_data_info(data_id_1)
-        print("\nTentative de lecture réussie (non attendue)")
-    except PermissionError as e:
-        print(f"\nTentative de lecture échouée comme prévu : {e}")
-
-    # Déverrouiller la donnée
-    print("\n---- Déverrouillage de la donnée ----")
-    pool.unlock_data(data_id_1)
-    print(tabulate(pool.source_to_data, headers='keys', tablefmt='pretty'))
-
-    # Vérifier que la donnée est déverrouillée
-    assert pool.source_to_data.loc[pool.source_to_data['data_id'] == data_id_1, 'locked'].values[0] == False
-    print("\n---- Vérification : La donnée est déverrouillée ----")
-
-    # Lecture de la donnée après déverrouillage
-    try:
-        data_info = pool.get_data_info(data_id_1)
-        print("\nLecture réussie après déverrouillage")
-        print(tabulate(data_info, headers='keys', tablefmt='pretty'))
-    except Exception as e:
-        print(f"\nErreur inattendue lors de la lecture : {e}")
-
-
-def test_chunked_read():
-    print("\n==== Test de la lecture par chunks ====\n")
-    pool = DataPool()
-
-    # Ajout et stockage d'une donnée dans un fichier
-    print("\n---- Ajout et stockage d'une donnée (Fichier) ----")
-    data_id_2 = pool.register_data(data_type="Data_Type.FREQ_SIGNAL", data_name="Freq_Signal_File",
-                                   source_id="Source_2", storage_type='file')
-
-    # Générateur de données chunk par chunk
-    data_gen = data_generator('float32', 500, 50)  # Générateur pour 500 éléments avec des chunks de taille 50
-    pool.store_data(data_id_2, data_gen, folder="./test_files")
-    print("\n---- Après stockage des données (Fichier) ----")
-    print(tabulate(pool.data_registry, headers='keys', tablefmt='pretty'))
-
-    # Déverrouiller la donnée avant de lire les chunks
-    print("\n---- Déverrouillage de la donnée ----")
-    pool.unlock_data(data_id_2)
-    print(tabulate(pool.source_to_data, headers='keys', tablefmt='pretty'))
-
-    # Ajout de deux subscribers
-    print("\n---- Ajout de subscribers ----")
-    pool.add_subscriber(data_id_2, "Subscriber_1")
-    pool.add_subscriber(data_id_2, "Subscriber_2")
-
-    # Utiliser le générateur de chunks sans chevauchement
-    print("\n---- Lecture par chunks (sans chevauchement) ----")
-    chunk_gen = pool.get_chunk_generator(data_id_2, chunk_size=50, subscriber_id="Subscriber_2")
-
-    for chunk in chunk_gen:
-        print(f"Chunk reçu : {chunk}")
-
-
-def test_overlapped_chunked_read():
-    print("\n==== Test de la lecture par chunks avec chevauchement ====\n")
-    pool = DataPool()
-
-    # Ajout et stockage d'une donnée dans un fichier
-    print("\n---- Ajout et stockage d'une donnée (Fichier) ----")
-    data_id_2 = pool.register_data(data_type="Data_Type.FREQ_SIGNAL", data_name="Freq_Signal_File",
-                                   source_id="Source_2", storage_type='file')
-
-    # Générateur de données chunk par chunk
-    data_gen = data_generator('float32', 500, 50)  # Générateur de 500 éléments avec des chunks de taille 50
-    pool.store_data(data_id_2, data_gen, folder="./test_files")
-    print("\n---- Après stockage des données (Fichier) ----")
-    print(tabulate(pool.data_registry, headers='keys', tablefmt='pretty'))
-
-    # Déverrouiller la donnée avant de lire les chunks
-    print("\n---- Déverrouillage de la donnée ----")
-    pool.unlock_data(data_id_2)
-    print(tabulate(pool.source_to_data, headers='keys', tablefmt='pretty'))
-
-    # Ajouter un subscriber avant la lecture
-    print("\n---- Ajout du subscriber ----")
-    pool.add_subscriber(data_id_2, subscriber_id="Subscriber_2")
-    print(tabulate(pool.source_to_data, headers='keys', tablefmt='pretty'))
-    print(tabulate(pool.subscriber_to_data, headers='keys', tablefmt='pretty'))
-    print(tabulate(pool.data_registry, headers='keys', tablefmt='pretty'))
-
-    # Utiliser le générateur de chunks avec chevauchement
-    print("\n---- Lecture par chunks avec chevauchement ----")
-    chunk_gen = pool.get_overlapped_chunk_generator(data_id_2, chunk_size=50, overlap=25, subscriber_id="Subscriber_2")
-
-    for chunk in chunk_gen:
-        print(f"Chunk reçu avec chevauchement : {chunk}")
-
-
-def test_acknowledgment():
-    print("\n==== Test de la gestion des acquittements ====\n")
-    pool = DataPool()
-
-    # Ajout et stockage d'une donnée en RAM
-    print("\n---- Ajout d'une donnée en RAM ----")
-    data_id_1 = pool.register_data(data_type="Data_Type.TEMPORAL_SIGNAL", data_name="Temp_Signal_RAM",
-                                   source_id="Source_1", storage_type='ram')
-    pool.store_data(data_id_1, list(range(1000)))  # Stoker des données exemple
-    print("\n---- Après stockage des données ----")
-    print(tabulate(pool.data_registry, headers='keys', tablefmt='pretty'))
-
-    # Ajout de deux subscribers
-    print("\n---- Ajout de subscribers ----")
-    pool.add_subscriber(data_id_1, "Subscriber_1")
-    pool.add_subscriber(data_id_1, "Subscriber_2")
-    print(tabulate(pool.subscriber_to_data, headers='keys', tablefmt='pretty'))
-
-    # Acquittement de Subscriber_1
-    print("\n---- Acquittement de Subscriber_1 ----")
-    pool.acknowledge_data(data_id_1, "Subscriber_1")
-    print(tabulate(pool.subscriber_to_data, headers='keys', tablefmt='pretty'))
-
-    # Acquittement de Subscriber_2 (Suppression de la donnée attendue)
-    print("\n---- Acquittement de Subscriber_2 (Suppression de la donnée) ----")
-    pool.acknowledge_data(data_id_1, "Subscriber_2")
-    print(tabulate(pool.subscriber_to_data, headers='keys', tablefmt='pretty'))
-    print(tabulate(pool.data_registry, headers='keys', tablefmt='pretty'))  # La donnée devrait être supprimée
-
-
-def test_datapool_methods():
-    print("\n==== Démarrage des tests pour la classe DataPool ====\n")
-
-    pool = DataPool()
-
-    # Ajout et stockage d'une donnée en RAM
-    print("\n---- Ajout de la première donnée (RAM) ----")
-    data_id_1 = pool.register_data(data_type="Data_Type.TEMPORAL_SIGNAL", data_name="Temp_Signal_RAM",
-                                   source_id="Source_1", storage_type='ram')
-    print(tabulate(pool.subscriber_to_data, headers='keys', tablefmt='pretty'))
-    print(tabulate(pool.data_registry, headers='keys', tablefmt='pretty'))
-    print(tabulate(pool.source_to_data, headers='keys', tablefmt='pretty'))
-
-    temp_data = list(range(1000))  # Exemple de données à stocker
-    pool.store_data(data_id_1, temp_data)
-    print("\n---- Après stockage des données (RAM) ----")
-    print(tabulate(pool.subscriber_to_data, headers='keys', tablefmt='pretty'))
-    print(tabulate(pool.data_registry, headers='keys', tablefmt='pretty'))
-    print(tabulate(pool.source_to_data, headers='keys', tablefmt='pretty'))
-
-    # Ajout et stockage d'une donnée dans un fichier
-    print("\n---- Ajout de la deuxième donnée (Fichier) ----")
-    data_id_2 = pool.register_data(data_type="Data_Type.FREQ_SIGNAL", data_name="Freq_Signal_File",
-                                   source_id="Source_2", storage_type='file')
-    print(tabulate(pool.subscriber_to_data, headers='keys', tablefmt='pretty'))
-    print(tabulate(pool.data_registry, headers='keys', tablefmt='pretty'))
-    print(tabulate(pool.source_to_data, headers='keys', tablefmt='pretty'))
-
-    # Générateur de données chunk par chunk
-    data_gen = data_generator('float32', 500, 50)  # Générateur pour 500 éléments avec des chunks de taille 50
-    pool.store_data(data_id_2, data_gen, folder="./test_files")
-    print("\n---- Après stockage des données (Fichier) ----")
-    print(tabulate(pool.subscriber_to_data, headers='keys', tablefmt='pretty'))
-    print(tabulate(pool.data_registry, headers='keys', tablefmt='pretty'))
-    print(tabulate(pool.source_to_data, headers='keys', tablefmt='pretty'))
-
-    # Ajout de subscribers
-    print("\n---- Ajout de subscribers pour la première donnée ----")
-    pool.add_subscriber(data_id_1, "Subscriber_1")
-    pool.add_subscriber(data_id_2, "Subscriber_2")
-    print(tabulate(pool.subscriber_to_data, headers='keys', tablefmt='pretty'))
-    print(tabulate(pool.data_registry, headers='keys', tablefmt='pretty'))
-    print(tabulate(pool.source_to_data, headers='keys', tablefmt='pretty'))
-
-    # Acquittement des subscribers
-    print("\n---- Acquittement de Subscriber_1 ----")
-    pool.acknowledge_data(data_id_1, "Subscriber_1")
-    print(tabulate(pool.subscriber_to_data, headers='keys', tablefmt='pretty'))
-    print(tabulate(pool.data_registry, headers='keys', tablefmt='pretty'))
-    print(tabulate(pool.source_to_data, headers='keys', tablefmt='pretty'))
-
-    print("\n---- Acquittement de Subscriber_2 (Suppression de la donnée) ----")
-    pool.acknowledge_data(data_id_2, "Subscriber_2")
-    print(tabulate(pool.subscriber_to_data, headers='keys', tablefmt='pretty'))
-    print(tabulate(pool.data_registry, headers='keys', tablefmt='pretty'))
-    print(tabulate(pool.source_to_data, headers='keys', tablefmt='pretty'))
-
-
-
-if __name__ == "__main__":
-    # Appel de la fonction test
-    # test_locking_mechanism()
-    # test_chunked_read()
-    # test_acknowledgment()
-    test_memory_leak_and_data_integrity_with_large_data()
-    # test_datapool_methods()
-    # test_overlapped_chunked_read()
