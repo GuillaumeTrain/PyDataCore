@@ -3,6 +3,11 @@ from tabulate import tabulate
 
 from DataCore.data import data_generator, Data_Type
 from DataCore.datapool import DataPool
+import os
+import numpy as np
+from datapool import DataPool
+from data import Data_Type
+
 
 # test de l'initialisation de la classe DataPool
 def test_datapool():
@@ -78,9 +83,134 @@ def test_datapool_all_data_types():
     print("All data types tested successfully")
 
 
+def test_file_storage_data_types():
+    pool = DataPool()
+
+    # Dossier de test
+    test_folder = "test_folder"
+
+    # Vérifier si le dossier existe, sinon le créer
+    if not os.path.exists(test_folder):
+        os.makedirs(test_folder)
+        print(f"Directory {test_folder} created")
+
+    # Test TEMPORAL_SIGNAL stored in file
+    data_value = [0.1, 0.2, 0.3]
+    data_name = "TempSignal_File"
+    data_id = pool.register_data(Data_Type.TEMPORAL_SIGNAL, data_name, "source_1", protected=False, in_file=True, time_step=0.01, unit='V')
+
+    # Ajouter un subscriber pour cette donnée
+    pool.add_subscriber(data_id, "subscriber_1")
+
+    # Stocker les données
+    pool.store_data(data_id, data_value, "source_1", folder=test_folder)
+
+    # Vérifier l'existence du fichier
+    data_obj = pool.data_registry.loc[pool.data_registry['data_id'] == data_id, 'data_object'].values[0]
+    assert data_obj.file_path is not None, f"File path for {data_name} should not be None"
+    assert os.path.exists(data_obj.file_path), f"File for {data_name} does not exist at {data_obj.file_path}"
+
+    # Lire les données
+    retrieved_data = pool.get_data(data_id, "subscriber_1")
+
+    # Comparer les données originales et récupérées
+    np.testing.assert_allclose(retrieved_data, data_value, rtol=1e-5, atol=1e-8, err_msg=f"Data mismatch for {data_name}: expected {data_value}, got {retrieved_data}")
+    print(f"Data comparison successful for {data_name}")
+
+    # Suppression du fichier après test
+    if os.path.exists(data_obj.file_path):
+        os.remove(data_obj.file_path)
+        print(f"File {data_obj.file_path} deleted after test")
+
+    # Test FREQ_SIGNAL stored in file
+    data_value = [1.0, 2.0, 3.0]
+    data_name = "FreqSignal_File"
+    data_id = pool.register_data(Data_Type.FREQ_SIGNAL, data_name, "source_1", protected=False, in_file=True, freq_step=0.1, unit='Hz')
+
+    # Ajouter un subscriber pour cette donnée
+    pool.add_subscriber(data_id, "subscriber_1")
+
+    # Stocker les données
+    pool.store_data(data_id, data_value, "source_1", folder=test_folder)
+
+    # Vérifier l'existence du fichier
+    data_obj = pool.data_registry.loc[pool.data_registry['data_id'] == data_id, 'data_object'].values[0]
+    assert data_obj.file_path is not None, f"File path for {data_name} should not be None"
+    assert os.path.exists(data_obj.file_path), f"File for {data_name} does not exist at {data_obj.file_path}"
+
+    # Lire les données
+    retrieved_data = pool.get_data(data_id, "subscriber_1")
+
+    # Comparer les données originales et récupérées
+    np.testing.assert_allclose(retrieved_data, data_value, rtol=1e-5, atol=1e-8, err_msg=f"Data mismatch for {data_name}: expected {data_value}, got {retrieved_data}")
+    print(f"Data comparison successful for {data_name}")
+
+    # Suppression du fichier après test
+    if os.path.exists(data_obj.file_path):
+        os.remove(data_obj.file_path)
+        print(f"File {data_obj.file_path} deleted after test")
+
+
+import numpy as np
+
+import os
+import numpy as np
+
+
+def test_chunk_storage_and_read():
+    pool = DataPool()
+
+    # Cas de test pour signal temporel avec chunk
+    data_value = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+    chunk_size = 3
+    folder = "test_folder"
+
+    # S'assurer que le dossier existe
+    if not os.path.exists(folder):
+        os.makedirs(folder)
+
+    print(f"Testing Data_Type.TEMPORAL_SIGNAL with data value: {data_value}...")
+    data_id = pool.register_data(Data_Type.TEMPORAL_SIGNAL, "TempSignal_Chunk_File", "source_1", in_file=True,
+                                 time_step=0.01, unit="V")
+
+    # Ajout d'un subscriber
+    pool.add_subscriber(data_id, "subscriber_1")
+
+    # Stockage par chunks
+    pool.store_data(data_id, data_value, "source_1", folder=folder)
+
+    print(f"Testing with chunk size {chunk_size} for both storage and read...")
+
+    # Lecture des chunks
+    read_chunks = list(pool.get_chunk_generator(data_id, chunk_size=chunk_size, subscriber_id="subscriber_1"))
+
+    # Comparaison des chunks lus avec ceux d'origine
+    stored_chunks = [data_value[i:i + chunk_size] for i in range(0, len(data_value), chunk_size)]
+
+    # Comparer chaque chunk avec une tolérance
+    for stored_chunk, read_chunk in zip(stored_chunks, read_chunks):
+        assert np.allclose(stored_chunk, read_chunk, rtol=1e-5, atol=1e-8), \
+            f"Chunk mismatch: expected {stored_chunk}, got {read_chunk}"
+
+    print("Data comparison for chunked storage and read successful")
+
+    # Supprimer le fichier après la lecture et l'acquittement
+    file_path = os.path.join(folder, f"{data_id}.dat")
+    if os.path.exists(file_path):
+        print(f"File {file_path} still exists.")
+    else:
+        print(f"File {file_path} was deleted after all subscribers acknowledged.")
+
+
+# Appel de la fonction de test
+test_chunk_storage_and_read()
+
+# Répéter la même logique pour FREQ_SIGNAL
+
 
 if __name__ == "__main__":
-    test_datapool()
-    test_datapool_all_data_types()
-
+    # test_datapool()
+    # test_datapool_all_data_types()
+    # test_file_storage_data_types()
+    test_chunk_storage_and_read()
     print("All tests passed")

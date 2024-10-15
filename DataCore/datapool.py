@@ -125,6 +125,23 @@ class DataPool:
         self.subscriber_to_data = pd.concat([self.subscriber_to_data, pd.DataFrame([subscriber_mapping])],
                                             ignore_index=True)
 
+    # def acknowledge_data(self, data_id, subscriber_id):
+    #     # Vérifier si la donnée est bien dans le registre
+    #     if data_id not in self.data_registry['data_id'].values:
+    #         raise ValueError(f"Data {data_id} not found in registry")
+    #
+    #     # Mettre à jour l'acquittement pour le subscriber
+    #     for index, row in self.subscriber_to_data.iterrows():
+    #         if row['data_id'] == data_id and row['subscriber_id'] == subscriber_id:
+    #             # Incrémenter l'acquittement pour ce subscriber
+    #             self.subscriber_to_data.at[index, 'acquitements'] = True
+    #             break
+    #     else:
+    #         raise ValueError(f"Subscriber {subscriber_id} not found for data {data_id}")
+    #
+    #     # Si tous les subscribers ont acquitté, vous pouvez choisir de libérer ou supprimer la donnée ici
+    #     if self._all_subscribers_acknowledged(data_id):
+    #         self._release_data(data_id)
     def acknowledge_data(self, data_id, subscriber_id):
         # Vérifier si la donnée est bien dans le registre
         if data_id not in self.data_registry['data_id'].values:
@@ -139,9 +156,14 @@ class DataPool:
         else:
             raise ValueError(f"Subscriber {subscriber_id} not found for data {data_id}")
 
-        # Si tous les subscribers ont acquitté, vous pouvez choisir de libérer ou supprimer la donnée ici
+        # Si tous les subscribers ont acquitté
         if self._all_subscribers_acknowledged(data_id):
-            self._release_data(data_id)
+            source_row = self.source_to_data[self.source_to_data['data_id'] == data_id]
+            if not source_row['protected'].values[0]:  # Si la donnée n'est pas protégée
+                print(f"All subscribers acknowledged and data {data_id} is not protected. Deleting data...")
+                self._release_data(data_id)  # Supprimer la donnée si elle n'est pas protégée
+            else:
+                print(f"Data {data_id} is protected, not deleting.")
 
     def _all_subscribers_acknowledged(self, data_id):
         # Vérifier si tous les subscribers ont acquitté
@@ -159,14 +181,20 @@ class DataPool:
         if data_id not in self.data_registry['data_id'].values:
             raise ValueError(f"Data {data_id} not found in registry during release process")
 
-        # Si la donnée est en RAM, la supprimer et nettoyer la référence
+        # Si la donnée est en RAM ou en fichier, la supprimer et nettoyer la référence
         for index, row in self.data_registry.iterrows():
             if row['data_id'] == data_id:
+                data_obj = row['data_object']
                 storage_type = row['storage_type']
 
                 if storage_type == 'ram':
                     # Supprimer l'objet data de la RAM
                     self.data_registry.at[index, 'data_object'] = None
+                elif storage_type == 'file':
+                    # Supprimer le fichier si la donnée est stockée en fichier
+                    if data_obj.file_path and os.path.exists(data_obj.file_path):
+                        print(f"Deleting file {data_obj.file_path} associated with data {data_id}")
+                        os.remove(data_obj.file_path)
 
                 # Retirer la donnée du registre
                 self.data_registry.drop(index, inplace=True)
@@ -332,22 +360,24 @@ class DataPool:
         :param subscriber_id: L'ID du subscriber effectuant la lecture (pour l'acquittement).
         :yield: Chaque chunk sans chevauchement.
         """
-        # Vérifier si la donnée est verrouillée
+        # Vérifier si la donnée existe et est verrouillée
         source_row = self.source_to_data[self.source_to_data['data_id'] == data_id]
-        if source_row['locked'].values[0]:
-            raise ValueError(f"Data with ID {data_id} is locked and cannot be read.")
+        if source_row.empty:
+            raise ValueError(f"Data with ID {data_id} not found in source_to_data.")
 
-        # Vérifier si la donnée est verrouillée
-        is_locked = self.source_to_data.loc[self.source_to_data['data_id'] == data_id, 'locked'].values[0]
-        if is_locked:
+        if source_row['locked'].values[0]:
             raise PermissionError(f"Data {data_id} is locked and cannot be read.")
-        # verifier si le subscriber est autorisé à lire la donnée
+
+        # Vérifier si le subscriber est autorisé à lire la donnée
         if subscriber_id not in self.subscriber_to_data.loc[
             self.subscriber_to_data['data_id'] == data_id, 'subscriber_id'].values:
             raise PermissionError(f"Subscriber {subscriber_id} is not authorized to read data {data_id}")
 
         # Récupérer l'objet Data à partir de data_registry
         data_obj = self.data_registry.loc[self.data_registry['data_id'] == data_id, 'data_object'].values[0]
+        if not data_obj:
+            raise ValueError(f"Data object for {data_id} not found or has been deleted.")
+
         # Lire les données via la méthode de la classe Data (chunk par chunk sans chevauchement)
         chunked_data = data_obj.read_chunked_data(chunk_size=chunk_size)
 
@@ -357,11 +387,48 @@ class DataPool:
 
         # Lorsque tous les chunks ont été traités, envoyer l'acquittement
         if subscriber_id is not None:
-            print(f"Acquitting data {data_id} for subscriber {subscriber_id}")
-            print(tabulate(self.subscriber_to_data, headers='keys', tablefmt='pretty'))
-            print(tabulate(self.data_registry, headers='keys', tablefmt='pretty'))
-
             self.acknowledge_data(data_id, subscriber_id)
+
+    # def get_chunk_generator(self, data_id, chunk_size=1024, subscriber_id=None):
+    #     """
+    #     Retourne un générateur de données chunk par chunk (sans chevauchement).
+    #     L'acquittement est effectué lorsque tous les chunks ont été traités.
+    #
+    #     :param data_id: L'ID unique de la donnée dans le DataPool.
+    #     :param chunk_size: La taille de chaque chunk.
+    #     :param subscriber_id: L'ID du subscriber effectuant la lecture (pour l'acquittement).
+    #     :yield: Chaque chunk sans chevauchement.
+    #     """
+    #     # Vérifier si la donnée est verrouillée
+    #     source_row = self.source_to_data[self.source_to_data['data_id'] == data_id]
+    #     if source_row['locked'].values[0]:
+    #         raise ValueError(f"Data with ID {data_id} is locked and cannot be read.")
+    #
+    #     # Vérifier si la donnée est verrouillée
+    #     is_locked = self.source_to_data.loc[self.source_to_data['data_id'] == data_id, 'locked'].values[0]
+    #     if is_locked:
+    #         raise PermissionError(f"Data {data_id} is locked and cannot be read.")
+    #     # verifier si le subscriber est autorisé à lire la donnée
+    #     if subscriber_id not in self.subscriber_to_data.loc[
+    #         self.subscriber_to_data['data_id'] == data_id, 'subscriber_id'].values:
+    #         raise PermissionError(f"Subscriber {subscriber_id} is not authorized to read data {data_id}")
+    #
+    #     # Récupérer l'objet Data à partir de data_registry
+    #     data_obj = self.data_registry.loc[self.data_registry['data_id'] == data_id, 'data_object'].values[0]
+    #     # Lire les données via la méthode de la classe Data (chunk par chunk sans chevauchement)
+    #     chunked_data = data_obj.read_chunked_data(chunk_size=chunk_size)
+    #
+    #     # Fournir les chunks au subscriber un par un
+    #     for chunk in chunked_data:
+    #         yield chunk
+    #
+    #     # Lorsque tous les chunks ont été traités, envoyer l'acquittement
+    #     if subscriber_id is not None:
+    #         print(f"Acquitting data {data_id} for subscriber {subscriber_id}")
+    #         print(tabulate(self.subscriber_to_data, headers='keys', tablefmt='pretty'))
+    #         print(tabulate(self.data_registry, headers='keys', tablefmt='pretty'))
+    #
+    #         self.acknowledge_data(data_id, subscriber_id)
 
     def get_overlapped_chunk_generator(self, data_id, chunk_size=1024, overlap=50, subscriber_id=None):
         """
