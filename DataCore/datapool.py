@@ -188,6 +188,20 @@ class DataPool:
         """Déverrouille la donnée après écriture."""
         self.source_to_data.loc[self.source_to_data['data_id'] == data_id, 'locked'] = False
 
+    # Vérification des définitions spécifiques pour TemporalSignalData et FreqSignalData
+    def _check_signal_data_definitions(self, data_obj):
+        """
+        Vérifie si les définitions de données sont valides pour les signaux temporels et fréquentiels.
+        """
+        if isinstance(data_obj, TemporalSignalData):
+            # Pour les signaux temporels
+            if data_obj.dt is None or data_obj.unit is None:
+                raise ValueError(f"Data {data_obj.data_id} is missing required definitions (time_step, unit)")
+        elif isinstance(data_obj, FreqSignalData):
+            # Pour les signaux fréquentiels
+            if data_obj.df is None or data_obj.unit is None:
+                raise ValueError(f"Data {data_obj.data_id} is missing required definitions (freq_step, unit)")
+
     def store_data(self, data_id, data_source, source_id, folder=None):
         """
         Stocke la donnée dans le DataPool en vérifiant les définitions de la donnée et son type de stockage.
@@ -214,18 +228,8 @@ class DataPool:
         # Récupérer l'objet Data correspondant à cette donnée
         data_obj = data_row['data_object'].values[0]
 
-        # Vérifier si le type de donnée est compatible avec le data_source
-        if isinstance(data_obj, (list, np.ndarray)):
-            data_size_in_bytes = len(data_source) * data_obj.sample_size  # Taille estimée des données
-            number_of_elements = len(data_source)
-        else:
-            data_size_in_bytes = None  # Pour les générateurs, ne pas calculer la taille
-            number_of_elements = None
-
         # Vérifier les définitions requises
-        if isinstance(data_obj, TemporalSignalData) or isinstance(data_obj, FreqSignalData):
-            if data_obj.dt is None or data_obj.unit is None:
-                raise ValueError(f"Data {data_id} is missing required definitions (time_step/freq_step, unit)")
+        self._check_signal_data_definitions(data_obj)
 
         # Stocker les données en RAM ou en fichier selon le type
         if data_obj.in_file:
@@ -236,14 +240,14 @@ class DataPool:
             else:
                 data_obj.store_data_from_data_generator(data_source, folder=folder)
         else:
-            if isinstance(data_source, (list, np.ndarray)):
+            if isinstance(data_source, (list, np.ndarray, str)):
                 data_obj.store_data_from_object(data_source)
             else:
                 data_obj.store_data_from_data_generator(data_source)
 
         # Mettre à jour la taille et le nombre d'éléments de la donnée après stockage
-        data_obj.data_size_in_bytes = data_size_in_bytes if data_size_in_bytes is not None else 0
-        data_obj.num_samples = number_of_elements if number_of_elements is not None else 0
+        data_obj.data_size_in_bytes = len(data_source) * data_obj.sample_size if isinstance(data_source, list) else 0
+        data_obj.num_samples = len(data_source) if isinstance(data_source, list) else 0
 
         # Mise à jour de l'objet dans le registre
         self.data_registry.loc[self.data_registry['data_id'] == data_id, 'data_object'] = data_obj

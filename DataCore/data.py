@@ -91,11 +91,20 @@ class Data:
                 raise ValueError("Folder must be specified for file-based storage.")
             self.file_path = os.path.join(folder, f"{self.data_id}.dat")
             with open(self.file_path, 'wb') as f:
-                packed_data = struct.pack(f'{len(data_object)}{self.sample_format}', *data_object)
-                f.write(packed_data)
+                if self.sample_type == 'str':
+                    # Pour les chaînes de caractères, stocker chaque chaîne telle qu'elle (pas par caractère)
+                    f.write("\n".join(data_object).encode('utf-8'))
+                else:
+                    packed_data = struct.pack(f'{len(data_object)}{self.sample_format}', *data_object)
+                    f.write(packed_data)
         else:
             # Stockage en RAM
-            self.data = data_object
+            if isinstance(data_object, list) and self.sample_type == 'str':
+                self.data = data_object  # Stocker la liste de chaînes telle quelle
+                print(colored(f"Data stored in RAM: {self.data}", "green"))
+            else:
+                self.data = data_object
+                print(colored(f"Data stored in RAM: {self.data}", "green"))
 
     def read_data(self):
         """
@@ -104,11 +113,21 @@ class Data:
         """
         if self.in_file and self.file_path:
             with open(self.file_path, 'rb') as f:
-                data = f.read()
-                unpacked_data = struct.unpack(f'{len(data) // self.sample_size}{self.sample_format}', data)
-                return unpacked_data
+                if self.sample_type == 'str':
+                    # Lire les chaînes de caractères comme des lignes complètes
+                    data = f.read().decode('utf-8').split("\n")
+                else:
+                    data = f.read()
+                    unpacked_data = struct.unpack(f'{len(data) // self.sample_size}{self.sample_format}', data)
+                    return unpacked_data
         else:
-            return self.data
+            if isinstance(self.data, list) and self.sample_type == 'str':
+                print(colored(f"Data read from RAM: {self.data}", "green"))
+                return self.data  # Renvoyer la liste de chaînes telle quelle
+
+            else:
+                print(colored(f"Data read from RAM: {self.data}", "green"))
+                return self.data
 
     def delete_data(self):
         """Supprime les données, soit en RAM, soit en supprimant le fichier sur le disque."""
@@ -290,6 +309,20 @@ class ConstantsData(Data):
 class StrData(Data):
     def __init__(self, data_id, data_name, data_size_in_bytes, number_of_elements, in_file=False):
         super().__init__(data_id, Data_Type.STR, data_name, data_size_in_bytes, number_of_elements, in_file, sample_type='str')
+
+    def store_data_from_object(self, data_object, folder=None):
+        if isinstance(data_object, str):
+            self.data = str(data_object)  # Stocker la chaîne entière
+        else:
+            raise ValueError("Expected a string for StrData")
+
+    def read_data(self):
+        if self.in_file and self.file_path:
+            with open(self.file_path, 'r') as f:
+                return f.read()  # Lire tout le contenu du fichier en tant que chaîne
+        else:
+            return str(self.data)  # Retourner la chaîne stockée
+
 
 
 class IntsData(Data):
