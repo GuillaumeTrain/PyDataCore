@@ -340,8 +340,7 @@ class TempLimitsData(Data):
         self.unit = unit
 
 
-
-# Générateur de données pour différents types (int32, int64, float32, float64)
+# Obsolète Générateur de données pour différents types (int32, int64, float32, float64)
 def data_generator(data_type, num_samples, chunk_size):
     """
     Génère un générateur de données du type spécifié.
