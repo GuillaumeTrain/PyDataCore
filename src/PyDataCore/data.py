@@ -322,7 +322,6 @@ class StrData(Data):
             return str(self.data)  # Retourner la chaîne stockée
 
 
-
 class IntsData(Data):
     def __init__(self, data_id, data_name, data_size_in_bytes, number_of_elements, in_file=False):
         super().__init__(data_id, Data_Type.INTS, data_name, data_size_in_bytes, number_of_elements, in_file, sample_type='int32')
