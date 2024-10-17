@@ -1,9 +1,5 @@
 from setuptools import setup, find_packages
 
-def parse_requirements(filename):
-    with open(filename, 'r') as f:
-        return [line.strip() for line in f if line.strip() and not line.startswith('#')]
-
 setup(
     name='PyDataCore',
     version='1.0.0',
@@ -22,8 +18,15 @@ setup(
         'Operating System :: OS Independent',
     ],
     python_requires='>=3.10',
-    install_requires=parse_requirements('requirements.txt'),
-    package_data={
-        '': ['requirements.txt', 'README.md'],
-    },
+    install_requires=[
+        'numpy~=2.1.2',
+        'termcolor~=2.5.0',
+        'pandas~=2.2.3',
+        'setuptools~=75.2.0',
+        'pytz~=2024.2',
+        'six~=1.16.0',
+        'tzdata~=2024.2',
+        'python-dateutil~=2.9.0.post0',
+        'tabulate~=0.9.0'
+    ],
 )
