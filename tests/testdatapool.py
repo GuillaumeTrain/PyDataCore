@@ -1,11 +1,9 @@
 # Fonctions de test
 from tabulate import tabulate
-
-from src.PyDataCore.datapool import DataPool
 import os
 import numpy as np
-from datapool import DataPool
-from data import Data_Type
+from PyDataCore.datapool import DataPool
+from PyDataCore.data import Data_Type
 
 
 # test de l'initialisation de la classe DataPool
@@ -150,10 +148,6 @@ def test_file_storage_data_types():
         print(f"File {data_obj.file_path} deleted after test")
 
 
-import os
-import numpy as np
-
-
 def test_chunk_storage_and_read():
     pool = DataPool()
 
@@ -197,12 +191,6 @@ def test_chunk_storage_and_read():
         print(f"File {file_path} still exists.")
     else:
         print(f"File {file_path} was deleted after all subscribers acknowledged.")
-
-
-# Appel de la fonction de test
-test_chunk_storage_and_read()
-
-# Répéter la même logique pour FREQ_SIGNAL
 
 
 if __name__ == "__main__":

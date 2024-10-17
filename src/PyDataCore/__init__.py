@@ -1,2 +1,2 @@
 from .datapool import DataPool
-from .data import Data, TemporalSignalData, FreqSignalData, FFTData, FilePathData, FolderPathData, FileListData, ConstantsData, StrData, IntsData, FreqLimitsData, TempLimitsData, Data_Type
+from .data import Data, TemporalSignalData, FreqSignalData, FileListData, ConstantsData, StrData, IntsData, FreqLimitsData, TempLimitsData, Data_Type, FFTSData, FolderPathListData, FilePathListData,FileRamMixin

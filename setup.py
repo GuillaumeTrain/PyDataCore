@@ -1,5 +1,10 @@
 from setuptools import setup, find_packages
 
+
+def parse_requirements(filename):
+    with open(filename, 'r') as f:
+        return [line.strip() for line in f if line.strip() and not line.startswith('#')]
+
 setup(
     name='PyDataCore',  # Nom du package
     version='1.0.0',  # Version de ta bibliothèque
@@ -18,8 +23,5 @@ setup(
         'Operating System :: OS Independent',
     ],
     python_requires='>=3.10',  # Version minimum de Python
-    install_requires=[  # Dépendances nécessaires
-        'numpy>=1.18',
-        'pandas>=1.1'
-    ],
+    install_requires=parse_requirements('requirements.txt'),
 )
