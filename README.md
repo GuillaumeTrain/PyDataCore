@@ -1,5 +1,5 @@
 
-# DataPool Project
+# PyDataCore Project
 
 ## Overview
 
