@@ -1,8 +1,7 @@
 # Fonctions de test
 from tabulate import tabulate
 
-from DataCore.data import data_generator, Data_Type
-from DataCore.datapool import DataPool
+from src.PyDataCore.datapool import DataPool
 import os
 import numpy as np
 from datapool import DataPool
@@ -150,8 +149,6 @@ def test_file_storage_data_types():
         os.remove(data_obj.file_path)
         print(f"File {data_obj.file_path} deleted after test")
 
-
-import numpy as np
 
 import os
 import numpy as np

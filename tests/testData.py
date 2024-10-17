@@ -3,7 +3,7 @@ import tracemalloc
 
 import numpy as np
 
-from DataCore.data import Data, data_generator
+from src.data import Data, data_generator
 
 
 def test_data_methods():
