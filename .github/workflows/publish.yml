@@ -9,13 +9,13 @@ jobs:
     name: Upload release to PyPI
     runs-on: ubuntu-latest
     permissions:
-      id-token: write  # Pour la publication de confiance
+      id-token: write  # Important pour la publication de confiance
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3  # Utilise la dernière version
+        uses: actions/checkout@v3
 
       - name: Set up Python
-        uses: actions/setup-python@v4  # Dernière version de l'action Python
+        uses: actions/setup-python@v4
         with:
           python-version: '3.x'
 
@@ -27,5 +27,7 @@ jobs:
       - name: Build package
         run: python -m build
 
-      - name: Publish package distributions to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1  # Publier sur PyPI
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          attestations: true
