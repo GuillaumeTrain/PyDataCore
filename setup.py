@@ -1,5 +1,5 @@
-import os
 from setuptools import setup, find_packages
+import os
 
 def parse_requirements(filename):
     filepath = os.path.join(os.path.dirname(__file__), filename)
