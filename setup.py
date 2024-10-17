@@ -25,4 +25,7 @@ setup(
     ],
     python_requires='>=3.10',
     install_requires=parse_requirements('requirements.txt'),
+    package_data={
+        '': ['requirements.txt', 'README.md'],  # Inclure requirements.txt et README.md
+    },
 )
