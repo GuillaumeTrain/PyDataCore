@@ -7,7 +7,7 @@ from termcolor import colored
 
 
 class Data:
-    def __init__(self, data_id, data_type, data_name, data_size_in_bytes, number_of_elements, in_file=False, sample_type='float'):
+    def __init__(self, data_id, data_type, data_name, data_size_in_bytes, number_of_elements=None, in_file=False, sample_type='float32'):
         """
         initialise une instance de données.
         :param data_id: identifiant unique de données.
@@ -69,6 +69,7 @@ class Data:
                         # Écrire chaque chunk de données numériques directement dans le fichier
                         packed_chunk = struct.pack(f'{len(chunk)}{self.sample_format}', *chunk)
                         f.write(packed_chunk)
+                        self.num_samples += len(chunk)
         else:
             # Stockage en RAM en collectant tous les chunks
             self.data = []
@@ -77,6 +78,8 @@ class Data:
                     self.data.extend(list(chunk))  # Ajout des caractères à la liste
                 else:
                     self.data.extend(chunk)  # Ajout des éléments numériques à la liste
+                #get chunk len
+                self.num_samples += len(chunk)
 
     def store_data_from_object(self, data_object, folder=None):
         """
@@ -95,6 +98,8 @@ class Data:
                 else:
                     packed_data = struct.pack(f'{len(data_object)}{self.sample_format}', *data_object)
                     f.write(packed_data)
+                    #get data len
+                    self.num_samples = len(data_object)
         else:
             # Stockage en RAM
             if isinstance(data_object, list) and self.sample_type == 'str':
@@ -172,6 +177,7 @@ class ChunkableMixin:
         :param chunk_size: Nombre de samples par chunk pour la lecture.
         :yield: Un chunk de données à la fois.
         """
+        print(type(self))
         if self.in_file and self.file_path:
             with open(self.file_path, 'rb') as f:
                 while True:
@@ -190,6 +196,28 @@ class ChunkableMixin:
                 else:
                     yield self.data[i:i + chunk_size]
 
+    def read_overlapped_chunked_data(self, chunk_size=1024, overlap=50):
+        """
+        Retourne un Générateur qui lit les données chunk par chunk avec un overlap.
+        :param chunk_size: Nombre de samples par chunk pour la lecture.
+        :param overlap: Nombre de samples pour
+        :yield: Un chunk de données à la fois.
+        """
+        if self.in_file and self.file_path:
+            with open(self.file_path, 'rb') as f:
+                while True:
+                    chunk = f.read(chunk_size * self.sample_size)
+                    if not chunk:
+                        break
+                    else:
+                        unpacked_chunk = struct.unpack(f'{len(chunk) // self.sample_size}{self.sample_format}', chunk)
+                        yield unpacked_chunk
+        else:
+            for i in range(0, len(self.data), chunk_size):
+                if self.sample_type == 'str':
+                    yield ''.join(self.data[i:i + chunk_size])
+                else:
+                    yield self.data[i:i + chunk_size]
 
 class FileRamMixin:
     def convert_ram_to_file(self, folder):
@@ -200,8 +228,12 @@ class FileRamMixin:
         if not self.in_file:
             if folder is None:
                 raise ValueError("Folder must be specified for file-based storage.")
+            self.file_path = os.path.abspath(folder)
+            print(f"File path: {self.file_path}")
+            #si le dossier n'existe pas on le crée
+            if not os.path.exists(folder):
+                os.makedirs(folder)
             self.file_path = os.path.join(folder, f"{self.data_id}.dat")
-
             with open(self.file_path, 'wb') as f:
                 if self.sample_type == 'str':
                     # Pour les chaînes de caractères, il faut écrire les données caractère par caractère

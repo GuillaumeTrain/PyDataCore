@@ -3,7 +3,8 @@ import tracemalloc
 
 import numpy as np
 
-from src.data import Data, data_generator
+from src.PyDataCore import TemporalSignalData
+from src.PyDataCore.data import Data, data_generator, Data_Type, ChunkableMixin, FileRamMixin
 
 
 def test_data_methods():
@@ -25,81 +26,90 @@ def test_data_methods():
 
         # Création de l'objet Data
         data_id = f"test_{data_type}"
-        data_store = Data(data_id=data_id, data_type="SIGNAL", data_name=f"test_{data_type}",
-                          data_size_in_bytes=data_size_in_bytes, num_samples=num_samples,
-                          in_file=False, sample_type=data_type)
+        data_object = Data(data_id=data_id,  data_name=f"test_{data_type}",
+                          data_size_in_bytes=data_size_in_bytes, number_of_elements=num_samples,
+                          in_file=False, data_type=data_type)
 
         # Vérification de la méthode _get_sample_format_and_size
         print(f"Test _get_sample_format_and_size pour {data_type}")
-        sample_format, sample_size = data_store._get_sample_format_and_size(data_type)
+        sample_format, sample_size = data_object._get_sample_format_and_size(data_type)
         print(f"Sample format: {sample_format}, Sample size: {sample_size} octets")
 
         # Test de store_data_from_data_generator
         print(f"Test store_data_from_data_generator pour {data_type} (RAM)")
         generator = data_generator(data_type, num_samples, chunk_size)
-        data_store.store_data_from_data_generator(generator)
+        data_object.store_data_from_data_generator(generator)
 
         # Test de read_chunked_data (RAM)
+        #atacher la méthode read_chunked_data dans data_object
+        data_object.__class__ = type("ChunkableMixin", (data_object.__class__, ChunkableMixin), {})
+        print(type(data_object))
+
+
         print(f"Test read_chunked_data pour {data_type} (RAM)")
         data_read = []
-        for chunk in data_store.read_chunked_data(chunk_size):
+        for chunk in data_object.read_chunked_data(chunk_size):
             data_read.extend(chunk)
         print(f"Nombre de chunks lus : {len(data_read) // chunk_size}")
 
         # Test de read_overlapped_chunked_data (RAM)
         print(f"Test read_overlapped_chunked_data pour {data_type} (RAM, overlap {overlap}%)")
         overlapped_data_read = []
-        for chunk in data_store.read_overlapped_chunked_data(chunk_size, overlap=overlap):
+        for chunk in data_object.read_overlapped_chunked_data(chunk_size, overlap=overlap):
             overlapped_data_read.extend(chunk)
         print(f"Nombre de chunks lus avec chevauchement : {len(overlapped_data_read) // chunk_size}")
 
         # Test de read_data (RAM)
         print(f"Test read_data pour {data_type} (RAM)")
-        full_data = data_store.read_data()
+        full_data = data_object.read_data()
         print(f"Taille des données lues : {len(full_data)}")
 
-        # Conversion RAM vers Fichier
+        # Conversion RAM vers Fichier uniquement pour les data de type 'int32', 'int64', 'float32', 'float64'
+
         folder = "./test_files"
         print(f"Test convert_ram_to_file pour {data_type}")
-        data_store.convert_ram_to_file(folder=folder)
+        if data_type in ['int32', 'int64', 'float32', 'float64']:
+            #attacher la méthode convert_ram_to_file dans data_object
+            data_object.__class__ = type("FileRamMixin", (data_object.__class__, FileRamMixin), {})
+            data_object.convert_ram_to_file(folder=folder)
 
-        # Conversion Fichier vers RAM
-        print(f"Test convert_file_to_ram pour {data_type}")
-        data_store.convert_file_to_ram()
+            # Conversion Fichier vers RAM
+            print(f"Test convert_file_to_ram pour {data_type}")
+            data_object.convert_file_to_ram()
 
         # Test delete_data
         print(f"Test delete_data pour {data_type}")
-        data_store.delete_data()
-        print(f"Données supprimées : {'Aucune donnée' if data_store.data is None else 'Données présentes'}")
+        data_object.delete_data()
+        print(f"Données supprimées : {'Aucune donnée' if data_object.data is None else 'Données présentes'}")
 
         # Re-test avec stockage en fichier
         print(f"Test store_data_from_data_generator pour {data_type} (Fichier)")
         generator = data_generator(data_type, num_samples, chunk_size)
-        data_store.store_data_from_data_generator(generator, folder=folder)
+        data_object.store_data_from_data_generator(generator, folder=folder)
 
         # Test de read_chunked_data (Fichier)
         print(f"Test read_chunked_data pour {data_type} (Fichier)")
         data_read = []
-        for chunk in data_store.read_chunked_data(chunk_size):
+        for chunk in data_object.read_chunked_data(chunk_size):
             data_read.extend(chunk)
         print(f"Nombre de chunks lus (Fichier) : {len(data_read) // chunk_size}")
 
         # Test de read_overlapped_chunked_data (Fichier)
         print(f"Test read_overlapped_chunked_data pour {data_type} (Fichier, overlap {overlap}%)")
         overlapped_data_read = []
-        for chunk in data_store.read_overlapped_chunked_data(chunk_size, overlap=overlap):
+        for chunk in data_object.read_overlapped_chunked_data(chunk_size, overlap=overlap):
             overlapped_data_read.extend(chunk)
         print(f"Nombre de chunks lus avec chevauchement (Fichier) : {len(overlapped_data_read) // chunk_size}")
 
         # Test de read_data (Fichier)
         print(f"Test read_data pour {data_type} (Fichier)")
-        full_data = data_store.read_data()
+        full_data = data_object.read_data()
         print(f"Taille des données lues (Fichier) : {len(full_data)}")
 
         # Suppression des données
         print(f"Test delete_data (Fichier) pour {data_type}")
-        data_store.delete_data()
-        print(f"Données supprimées : {'Aucune donnée' if data_store.data is None else 'Données présentes'}")
+        data_object.delete_data()
+        print(f"Données supprimées : {'Aucune donnée' if data_object.data is None else 'Données présentes'}")
 
     print("---- Fin des tests des méthodes de la classe Data ----")
 
@@ -158,8 +168,8 @@ def test_data_storage(data_type, num_samples, chunk_size, use_file):
 
     data_id = f"test_{data_type}"
     sample_type = data_type
-    data_store = Data(data_id=data_id, data_type="SIGNAL", data_name=f"test_{data_type}",
-                      data_size_in_bytes=data_size_in_bytes, num_samples=num_samples,
+    data_object = Data(data_id=data_id, data_type="SIGNAL", data_name=f"test_{data_type}",
+                      data_size_in_bytes=data_size_in_bytes, number_of_elements=num_samples,
                       in_file=use_file, sample_type=sample_type)
 
     folder = "./test_files" if use_file else None
@@ -170,14 +180,16 @@ def test_data_storage(data_type, num_samples, chunk_size, use_file):
 
     # Utiliser le bon stockage selon que les données viennent d'un générateur ou d'un objet
     if isinstance(generator, np.ndarray):
-        data_store.store_data_from_object(np.array(list(data_generator(data_type, num_samples, chunk_size))),
+        data_object.store_data_from_object(np.array(list(data_generator(data_type, num_samples, chunk_size))),
                                           folder=folder)
     else:
-        data_store.store_data_from_data_generator(data_generator(data_type, num_samples, chunk_size), folder=folder)
+        data_object.store_data_from_data_generator(data_generator(data_type, num_samples, chunk_size), folder=folder)
 
     # Lire les données stockées et les comparer aux données d'origine
     data_read = []
-    for chunk in data_store.read_chunked_data(chunk_size):
+    #attacher la méthode read_chunked_data dans data_object
+    data_object.__class__ = type("ChunkableMixin", (data_object.__class__, ChunkableMixin), {})
+    for chunk in data_object.read_chunked_data(chunk_size):
         data_read.extend(chunk)
 
     # Générer les données initiales pour comparaison
@@ -194,7 +206,7 @@ def test_data_storage(data_type, num_samples, chunk_size, use_file):
     elif np.issubdtype(original_data.dtype, np.floating):
         if np.allclose(original_data, data_read, rtol=1e-6, atol=1e-9):
             print(f"Data match for {data_type} (file: {use_file})")
-    return data_store
+    return data_object
 
 
 def analyze_memory_leaks():
@@ -224,7 +236,6 @@ def analyze_memory_leaks():
 
 if __name__ == "__main__":
     test_data_methods()
-
     # Test avec différents types de données et stockage en fichier ou en RAM
     check_memory_leaks()
     analyze_memory_leaks()
