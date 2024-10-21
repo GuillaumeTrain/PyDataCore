@@ -107,6 +107,7 @@ class Data:
                 print(colored(f"Data stored in RAM: {self.data}", "green"))
             else:
                 self.data = data_object
+                self.num_samples = len(data_object)
                 print(colored(f"Data stored in RAM: {self.data}", "green"))
 
     def read_data(self):
@@ -162,6 +163,7 @@ class ChunkableMixin:
                         # Écrire chaque chunk de données numériques
                         packed_chunk = struct.pack(f'{len(chunk)}{self.sample_format}', *chunk)
                         f.write(packed_chunk)
+                        self.num_samples += len(chunk)
         else:
             # Stockage en RAM en collectant tous les chunks
             self.data = []
@@ -170,6 +172,7 @@ class ChunkableMixin:
                     self.data.extend(list(chunk))
                 else:
                     self.data.extend(chunk)
+                    self.num_samples += len(chunk)
 
     def read_chunked_data(self, chunk_size=1024):
         """
