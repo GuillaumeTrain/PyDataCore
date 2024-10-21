@@ -368,6 +368,31 @@ class DataPool:
         if subscriber_id is not None:
             self.acknowledge_data(data_id, subscriber_id)
 
+    def get_data_chunk(self, data_id, chunk_index, chunk_size=1024):
+        """
+        Récupère un chunk spécifique des données depuis un fichier ou la RAM.
+        :param data_id: L'ID unique de la donnée dans le DataPool.
+        :param chunk_index: Index du chunk à récupérer.
+        :param chunk_size: Taille du chunk (en nombre de samples).
+        :return: Le chunk de données.
+        """
+        # Vérifier si la donnée existe dans le registre
+        data_row = self.data_registry[self.data_registry['data_id'] == data_id]
+        if data_row.empty:
+            raise ValueError(f"Data {data_id} not found in registry")
+
+        # Récupérer l'objet Data correspondant
+        data_obj = data_row['data_object'].values[0]
+
+        if data_row['storage_type'].values[0] == 'file':
+            # Si la donnée est stockée dans un fichier, utiliser la méthode read_specific_chunk
+            return data_obj.read_specific_chunk(chunk_index, chunk_size)
+        else:
+            # Si la donnée est en RAM, extraire simplement le segment correspondant
+            start_idx = chunk_index * chunk_size
+            end_idx = min(start_idx + chunk_size, len(data_obj.data))
+            return data_obj.data[start_idx:end_idx]
+
     def get_overlapped_chunk_generator(self, data_id, chunk_size=1024, overlap=50, subscriber_id=None):
         """
         Retourne un générateur de données chunk par chunk avec chevauchement.
