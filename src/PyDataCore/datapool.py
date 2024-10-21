@@ -254,7 +254,7 @@ class DataPool:
 
         # Mettre à jour la taille et le nombre d'éléments de la donnée après stockage
         data_obj.data_size_in_bytes = len(data_source) * data_obj.sample_size if isinstance(data_source, list) else 0
-        data_obj.num_samples = len(data_source) if isinstance(data_source, list) else 0
+        # data_obj.num_samples = len(data_source) if isinstance(data_source, list) else 0
 
         # Mise à jour de l'objet dans le registre
         self.data_registry.loc[self.data_registry['data_id'] == data_id, 'data_object'] = data_obj
