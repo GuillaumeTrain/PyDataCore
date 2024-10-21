@@ -219,6 +219,34 @@ class ChunkableMixin:
                 else:
                     yield self.data[i:i + chunk_size]
 
+    def read_specific_chunk(self, chunk_index, chunk_size=1024):
+        """
+        Retourne un chunk spécifique de données en accédant directement à sa position dans le fichier.
+        :param chunk_index: Index du chunk à lire.
+        :param chunk_size: Taille du chunk (en nombre de samples).
+        :return: Le chunk de données lu.
+        """
+        if self.in_file and self.file_path:
+            with open(self.file_path, 'rb') as f:
+                # Calculer la position du chunk dans le fichier
+                offset = chunk_index * chunk_size * self.sample_size
+                f.seek(offset)  # Se déplacer à l'offset calculé
+
+                # Lire les données, mais s'assurer de ne pas lire plus que ce qui reste dans le fichier
+                remaining_bytes = self.data_size_in_bytes - offset
+                bytes_to_read = min(chunk_size * self.sample_size, remaining_bytes)
+
+                chunk_data = f.read(bytes_to_read)
+
+                # Décoder les données en fonction de leur type
+                if self.sample_type == 'str':
+                    return chunk_data.decode('utf-8')
+                else:
+                    return struct.unpack(f'{len(chunk_data) // self.sample_size}{self.sample_format}', chunk_data)
+        else:
+            raise ValueError("Data is not stored in a file or file path is missing.")
+
+
 class FileRamMixin:
     def convert_ram_to_file(self, folder):
         """

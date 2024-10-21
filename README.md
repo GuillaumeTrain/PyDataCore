@@ -77,6 +77,7 @@ A mixin class that allows for reading and storing data in chunks. Used for large
 #### Methods:
 - `store_data_from_data_generator()`: Stores data chunk by chunk from a generator.
 - `read_chunked_data()`: Reads data in chunks, yielding each chunk iteratively.
+- `read_specific_chunk()` : Retourne un chunk spécifique de données en accédant directement à sa position dans le fichier.
 
 #### Example:
 ```python
