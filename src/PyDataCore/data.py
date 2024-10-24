@@ -7,7 +7,8 @@ from termcolor import colored
 
 
 class Data:
-    def __init__(self, data_id, data_type, data_name, data_size_in_bytes, number_of_elements=None, in_file=False, sample_type='float32'):
+    def __init__(self, data_id, data_type, data_name, data_size_in_bytes, number_of_elements=None, in_file=False,
+                 sample_type='float32'):
         """
         initialise une instance de données.
         :param data_id: identifiant unique de données.
@@ -21,7 +22,7 @@ class Data:
         self.data_id = data_id
         self.data_type = data_type
         self.data_name = data_name
-        self.data_size_in_bytes = data_size_in_bytes
+        self.data_size_in_bytes = None
         self.num_samples = number_of_elements
         self.in_file = in_file
         self.sample_type = sample_type
@@ -49,37 +50,26 @@ class Data:
             raise ValueError(f"Unsupported sample type: {sample_type}")
 
     def store_data_from_data_generator(self, data_generator, folder=None):
-        """
-        Stocke les données chunk par chunk depuis un générateur.
-        :param data_generator: Générateur fournissant des chunks de données (par exemple des flottants ou des chaînes).
-        :param folder: Dossier où stocker le fichier (si in_file est True).
-        """
         if self.in_file:
             if folder is None:
                 raise ValueError("Folder must be specified for file-based storage.")
             self.file_path = os.path.join(folder, f"{self.data_id}.dat")
 
-            # Ouvre le fichier en mode écriture binaire (chunk par chunk)
             with open(self.file_path, 'wb') as f:
+                total_samples = 0
                 for chunk in data_generator:
                     if self.sample_type == 'str':
-                        # Écrire chaque chunk de chaînes de caractères directement
                         f.write(''.join(chunk).encode('utf-8'))
                     else:
-                        # Écrire chaque chunk de données numériques directement dans le fichier
                         packed_chunk = struct.pack(f'{len(chunk)}{self.sample_format}', *chunk)
                         f.write(packed_chunk)
-                        self.num_samples += len(chunk)
-        else:
-            # Stockage en RAM en collectant tous les chunks
-            self.data = []
-            for chunk in data_generator:
-                if self.sample_type == 'str':
-                    self.data.extend(list(chunk))  # Ajout des caractères à la liste
-                else:
-                    self.data.extend(chunk)  # Ajout des éléments numériques à la liste
-                #get chunk len
-                self.num_samples += len(chunk)
+
+                        # Mettre à jour la taille des données et le nombre de samples
+                        total_samples += len(chunk)
+
+                # Définir la taille totale des données en bytes et le nombre total de samples
+                self.data_size_in_bytes = total_samples * self.sample_size
+                self.num_samples = total_samples
 
     def store_data_from_object(self, data_object, folder=None):
         """
@@ -95,19 +85,30 @@ class Data:
                 if self.sample_type == 'str':
                     # Pour les chaînes de caractères, stocker chaque chaîne telle qu'elle (pas par caractère)
                     f.write("\n".join(data_object).encode('utf-8'))
+                    # Taille des données pour une chaîne de caractères
+                    self.data_size_in_bytes = len("\n".join(data_object).encode('utf-8'))
                 else:
                     packed_data = struct.pack(f'{len(data_object)}{self.sample_format}', *data_object)
                     f.write(packed_data)
-                    #get data len
+                    # Définir la taille totale des données en bytes
+                    self.data_size_in_bytes = len(data_object) * self.sample_size
+                    print(colored(f"self.data_size_in_bytes: {self.data_size_in_bytes}", "green"))
+                    # Définir le nombre total de samples
                     self.num_samples = len(data_object)
+                    print(colored(f"self.num_samples: {self.num_samples}", "green"))
         else:
             # Stockage en RAM
             if isinstance(data_object, list) and self.sample_type == 'str':
                 self.data = data_object  # Stocker la liste de chaînes telle quelle
+                # Calculer la taille des données en bytes pour les chaînes
+                self.data_size_in_bytes = len("\n".join(self.data).encode('utf-8'))
+                self.num_samples = len(self.data)  # Nombre de chaînes
                 print(colored(f"Data stored in RAM: {self.data}", "green"))
             else:
                 self.data = data_object
-                self.num_samples = len(data_object)
+                # Calculer la taille des données en bytes pour les données numériques
+                self.num_samples = len(data_object)  # Nombre d'échantillons
+                self.data_size_in_bytes = self.num_samples * self.sample_size
                 print(colored(f"Data stored in RAM: {self.data}", "green"))
 
     def read_data(self):
@@ -142,37 +143,43 @@ class Data:
 
 
 class ChunkableMixin:
+
     def store_data_from_data_generator(self, data_generator, folder=None):
-        """
-        Stocke les données chunk par chunk depuis un générateur.
-        :param data_generator: Générateur fournissant des chunks de données.
-        :param folder: Dossier où stocker le fichier (si `in_file` est True).
-        """
         if self.in_file:
             if folder is None:
                 raise ValueError("Folder must be specified for file-based storage.")
             self.file_path = os.path.join(folder, f"{self.data_id}.dat")
 
-            # Ouvre le fichier en mode écriture binaire (chunk par chunk)
             with open(self.file_path, 'wb') as f:
+                total_samples = 0
                 for chunk in data_generator:
                     if self.sample_type == 'str':
-                        # Écrire chaque chunk de chaînes de caractères directement
                         f.write(''.join(chunk).encode('utf-8'))
                     else:
-                        # Écrire chaque chunk de données numériques
                         packed_chunk = struct.pack(f'{len(chunk)}{self.sample_format}', *chunk)
                         f.write(packed_chunk)
-                        self.num_samples += len(chunk)
+
+                        # Mettre à jour la taille des données et le nombre de samples
+                        total_samples += len(chunk)
+
+                # Définir la taille totale des données en bytes et le nombre total de samples
+                self.data_size_in_bytes = total_samples * self.sample_size
+                print(f"Data size in bytes: {self.data_size_in_bytes}")
+                self.num_samples = total_samples
+                print(f"Number of samples: {self.num_samples}")
         else:
-            # Stockage en RAM en collectant tous les chunks
+            # Stockage en RAM
             self.data = []
+            total_samples = 0
             for chunk in data_generator:
-                if self.sample_type == 'str':
-                    self.data.extend(list(chunk))
-                else:
-                    self.data.extend(chunk)
-                    self.num_samples += len(chunk)
+                self.data.extend(chunk)
+                total_samples += len(chunk)
+
+            # Définir la taille totale des données en bytes et le nombre total de samples
+            self.data_size_in_bytes = total_samples * self.sample_size
+            print(f"Data size in bytes: {self.data_size_in_bytes}")
+            self.num_samples = total_samples
+            print(f"Number of samples: {self.num_samples}")
 
     def read_chunked_data(self, chunk_size=1024):
         """
@@ -230,17 +237,35 @@ class ChunkableMixin:
         :return: Le chunk de données lu.
         """
         if self.in_file and self.file_path:
+            # Obtenir la taille du fichier
+            file_size = os.path.getsize(self.file_path)
+            # print(f"File size: {file_size} bytes")
+
+            # Recalculer le nombre total de samples en fonction de la taille du fichier
+            num_samples_from_file = file_size // self.sample_size
+            # print(
+            #     f"num_samples_from_file: {num_samples_from_file},file_size: {file_size}, sample_size: {self.sample_size}")
+            # print(f"Data size in bytes: {self.data_size_in_bytes}")
             with open(self.file_path, 'rb') as f:
                 # Calculer la position du chunk dans le fichier
                 offset = chunk_index * chunk_size * self.sample_size
+                # print(f"Offset: {offset}, Chunk size: {chunk_size}, Sample size: {self.sample_size}")
                 f.seek(offset)  # Se déplacer à l'offset calculé
 
                 # Lire les données, mais s'assurer de ne pas lire plus que ce qui reste dans le fichier
                 remaining_bytes = self.data_size_in_bytes - offset
+                # print(
+                #     f"self.data_size_in_bytes: {self.data_size_in_bytes}, Offset: {offset}, Remaining bytes: {remaining_bytes}")
+                if remaining_bytes <= 0:
+                    # print(f"Warning: No remaining bytes to read at chunk {chunk_index}.")
+                    return []  # Retourner un tableau vide si aucun octet restant à lire
+
                 bytes_to_read = min(chunk_size * self.sample_size, remaining_bytes)
 
-                chunk_data = f.read(bytes_to_read)
+                # print(f"Offset: {offset}, Bytes to read: {bytes_to_read}, Remaining bytes: {remaining_bytes}")
 
+                chunk_data = f.read(bytes_to_read)
+                # print(f"Chunk {chunk_index}: Read {len(chunk_data)} bytes.")
                 # Décoder les données en fonction de leur type
                 if self.sample_type == 'str':
                     return chunk_data.decode('utf-8')
@@ -261,7 +286,7 @@ class FileRamMixin:
                 raise ValueError("Folder must be specified for file-based storage.")
             self.file_path = os.path.abspath(folder)
             print(f"File path: {self.file_path}")
-            #si le dossier n'existe pas on le crée
+            # si le dossier n'existe pas on le crée
             if not os.path.exists(folder):
                 os.makedirs(folder)
             self.file_path = os.path.join(folder, f"{self.data_id}.dat")
@@ -286,7 +311,7 @@ class FileRamMixin:
                 data = f.read()
                 self.data = struct.unpack(f'{len(data) // self.sample_size}{self.sample_format}', data)
             self.in_file = False
-            #remove file
+            # remove file
             os.remove(self.file_path)
             self.file_path = None
         else:
@@ -294,7 +319,7 @@ class FileRamMixin:
 
 
 class Data_Type(Enum):
-    #a stocker systematiquement en ram
+    # a stocker systematiquement en ram
     FILE_PATHS = 0  # une liste de chemins de fichiers (doit pouvoir supporter une liste de chemins ou un seul chemin)
     FOLDER_PATHS = 1  # une liste de chemins de dossiers (doit pouvoir supporter une liste de dossiers ou un seul dossier)
     FILE_LIST = 2  # une liste de fichiers (doit pouvoir supporter une liste de fichiers ou un seul fichier)
@@ -303,7 +328,7 @@ class Data_Type(Enum):
     CONSTANTS = 8  # une liste de valeur constante (float32) avec leur nom (doit pouvoir supporter une liste de constantes ou une seule constante)
     STR = 9  # une chaîne de caractères avec son nom
     INTS = 10  # une liste d'entiers avec leurs noms (doit pouvoir supporter une liste d'entier ou un seul entier)
-    #a stocker en ram ou en fichier
+    # a stocker en ram ou en fichier
     TEMPORAL_SIGNAL = 3  # un signal temporel défini par son nom , sa résolution (time_step),le temps minimum en seconde (float32) par défault a 0, son unité (V, A, etc.) et ses valeurs (liste de valeurs en float32) si stoqué en ram ou un chemin de fichier si stocké en fichier
     FREQ_SIGNAL = 4  # un signal fréquentiel défini par son nom , sa résolution (freq_step),la fréquence minimum en Hz (float32) et par défaut a 0un timestamp (float32 optionnel par défaut a 0), son unité (V, A, etc.) et ses valeurs (liste de valeurs en float32) si stoqué en ram ou un chemin de fichier si stocké en fichier
     FFTS = 7  # une liste de FREQ_SIGNALs avec un nom commun , une unité commune , une résolution fréquentielle commune, une fréquence min commune , une unité commune(V,A,etc), chaque FREQ_SIGNAL est un FFT d'un TEMPORAL_SIGNAL et possède un timestamp (float32) correspondant au millieu de la fenêtre temporelle pour laquelle la FFT a été calculés
@@ -311,36 +336,43 @@ class Data_Type(Enum):
 
 class FilePathListData(Data):
     def __init__(self, data_id, data_name, data_size_in_bytes, number_of_elements=1, in_file=False):
-        super().__init__(data_id, Data_Type.FILE_PATHS, data_name, data_size_in_bytes, number_of_elements, in_file, sample_type='str')
+        super().__init__(data_id, Data_Type.FILE_PATHS, data_name, data_size_in_bytes, number_of_elements, in_file,
+                         sample_type='str')
 
 
 class FolderPathListData(Data):
     def __init__(self, data_id, data_name, data_size_in_bytes, number_of_elements=1, in_file=False):
-        super().__init__(data_id, Data_Type.FOLDER_PATHS, data_name, data_size_in_bytes, number_of_elements, in_file, sample_type='str')
+        super().__init__(data_id, Data_Type.FOLDER_PATHS, data_name, data_size_in_bytes, number_of_elements, in_file,
+                         sample_type='str')
 
 
 class FileListData(Data):
     def __init__(self, data_id, data_name, data_size_in_bytes, number_of_elements=1, in_file=False):
-        super().__init__(data_id, Data_Type.FILE_LIST, data_name, data_size_in_bytes, number_of_elements, in_file, sample_type='str')
+        super().__init__(data_id, Data_Type.FILE_LIST, data_name, data_size_in_bytes, number_of_elements, in_file,
+                         sample_type='str')
 
 
 class TemporalSignalData(Data, ChunkableMixin, FileRamMixin):
-    def __init__(self, data_id, data_name, data_size_in_bytes, number_of_elements, time_step, unit, tmin=0.0, in_file=False):
-        super().__init__(data_id, Data_Type.TEMPORAL_SIGNAL, data_name, data_size_in_bytes, number_of_elements, in_file, sample_type='float32')
+    def __init__(self, data_id, data_name, data_size_in_bytes, number_of_elements, time_step, unit, tmin=0.0,
+                 in_file=False):
+        super().__init__(data_id, Data_Type.TEMPORAL_SIGNAL, data_name, data_size_in_bytes, number_of_elements, in_file,
+                         sample_type='float32')
         self.dt = time_step
         self.unit = unit
         self.tmin = tmin  # temps minimum (par défaut à 0)
 
     def get_sampling_rate(self):
-        return 1/self.dt
+        return 1 / self.dt
 
     def set_sampling_rate(self, sampling_rate):
-        self.dt = 1/sampling_rate
+        self.dt = 1 / sampling_rate
 
 
-class FreqSignalData(Data, ChunkableMixin , FileRamMixin):
-    def __init__(self, data_id, data_name, data_size_in_bytes, number_of_elements, freq_step, unit, fmin=0.0, timestamp=0.0, in_file=False):
-        super().__init__(data_id, Data_Type.FREQ_SIGNAL, data_name, data_size_in_bytes, number_of_elements, in_file, sample_type='float32')
+class FreqSignalData(Data, ChunkableMixin, FileRamMixin):
+    def __init__(self, data_id, data_name, data_size_in_bytes, number_of_elements, freq_step, unit, fmin=0.0,
+                 timestamp=0.0, in_file=False):
+        super().__init__(data_id, Data_Type.FREQ_SIGNAL, data_name, data_size_in_bytes, number_of_elements, in_file,
+                         sample_type='float32')
         self.df = freq_step
         self.unit = unit
         self.fmin = fmin  # fréquence minimum (par défaut à 0)
@@ -348,8 +380,10 @@ class FreqSignalData(Data, ChunkableMixin , FileRamMixin):
 
 
 class FFTSData(Data):
-    def __init__(self, data_id, data_name, data_size_in_bytes, number_of_elements, freq_step, fmin, unit, in_file=False):
-        super().__init__(data_id, Data_Type.FFTS, data_name, data_size_in_bytes, number_of_elements, in_file, sample_type='float32')
+    def __init__(self, data_id, data_name, data_size_in_bytes, number_of_elements, freq_step, fmin, unit,
+                 in_file=False):
+        super().__init__(data_id, Data_Type.FFTS, data_name, data_size_in_bytes, number_of_elements, in_file,
+                         sample_type='float32')
         self.freq_step = freq_step
         self.fmin = fmin
         self.unit = unit
@@ -364,12 +398,14 @@ class FFTSData(Data):
 
 class ConstantsData(Data):
     def __init__(self, data_id, data_name, data_size_in_bytes, number_of_elements, in_file=False):
-        super().__init__(data_id, Data_Type.CONSTANTS, data_name, data_size_in_bytes, number_of_elements, in_file, sample_type='float32')
+        super().__init__(data_id, Data_Type.CONSTANTS, data_name, data_size_in_bytes, number_of_elements, in_file,
+                         sample_type='float32')
 
 
 class StrData(Data):
     def __init__(self, data_id, data_name, data_size_in_bytes, number_of_elements, in_file=False):
-        super().__init__(data_id, Data_Type.STR, data_name, data_size_in_bytes, number_of_elements, in_file, sample_type='str')
+        super().__init__(data_id, Data_Type.STR, data_name, data_size_in_bytes, number_of_elements, in_file,
+                         sample_type='str')
 
     def store_data_from_object(self, data_object, folder=None):
         if isinstance(data_object, str):
@@ -387,18 +423,21 @@ class StrData(Data):
 
 class IntsData(Data):
     def __init__(self, data_id, data_name, data_size_in_bytes, number_of_elements, in_file=False):
-        super().__init__(data_id, Data_Type.INTS, data_name, data_size_in_bytes, number_of_elements, in_file, sample_type='int32')
+        super().__init__(data_id, Data_Type.INTS, data_name, data_size_in_bytes, number_of_elements, in_file,
+                         sample_type='int32')
 
 
 class FreqLimitsData(Data):
     def __init__(self, data_id, data_name, data_size_in_bytes, number_of_elements, unit, in_file=False):
-        super().__init__(data_id, Data_Type.FREQ_LIMITS, data_name, data_size_in_bytes, number_of_elements, in_file, sample_type='float32')
+        super().__init__(data_id, Data_Type.FREQ_LIMITS, data_name, data_size_in_bytes, number_of_elements, in_file,
+                         sample_type='float32')
         self.unit = unit
 
 
 class TempLimitsData(Data):
     def __init__(self, data_id, data_name, data_size_in_bytes, number_of_elements, unit, in_file=False):
-        super().__init__(data_id, Data_Type.TEMP_LIMITS, data_name, data_size_in_bytes, number_of_elements, in_file, sample_type='float32')
+        super().__init__(data_id, Data_Type.TEMP_LIMITS, data_name, data_size_in_bytes, number_of_elements, in_file,
+                         sample_type='float32')
         self.unit = unit
 
 
