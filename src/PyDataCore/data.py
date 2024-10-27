@@ -432,6 +432,68 @@ class FreqLimitsData(Data):
         super().__init__(data_id, Data_Type.FREQ_LIMITS, data_name, data_size_in_bytes, number_of_elements, in_file,
                          sample_type='float32')
         self.unit = unit
+        self.data = []  # Liste de tuples (fréquence, niveau limite)
+        self.interpolation_type = None
+
+    def set_interpolation_type(self, interpolation_type):
+        """
+        Définit le type d'interpolation pour les limites de fréquence : 'linear' ou 'log'.
+        """
+        if interpolation_type not in ('linear', 'log'):
+            raise ValueError("Interpolation type must be either 'linear' or 'log'.")
+        self.interpolation_type = interpolation_type
+
+    def add_limit_point(self, frequency, level):
+        """
+        Ajoute un point de limite avec une fréquence et un niveau.
+        :param frequency: Fréquence (en Hz) pour le point de limite.
+        :param level: Niveau limite correspondant à la fréquence.
+        """
+        if self.data and frequency <= self.data[-1][0]:
+            raise ValueError("Frequency points must be in strictly increasing order.")
+        self.data.append((frequency, level))
+
+    def clear_limit_points(self):
+        """
+        Efface tous les points de limite de fréquence.
+        """
+        self.data.clear()
+
+    def interpolate(self, freq):
+        """
+        Interpole le niveau limite pour une fréquence donnée en fonction du type d'interpolation spécifié.
+        :param freq: La fréquence pour laquelle interpoler le niveau limite.
+        :return: Le niveau limite interpolé.
+        """
+        if not self.data:
+            raise ValueError("No frequency limit points have been added.")
+        if self.interpolation_type is None:
+            raise ValueError("Interpolation type is not set.")
+
+        # Extraire les fréquences et niveaux limites
+        frequencies, levels = zip(*self.data)
+
+        if freq <= frequencies[0]:
+            return levels[0]  # En dessous de la première fréquence, renvoyer le premier niveau
+        elif freq >= frequencies[-1]:
+            return levels[-1]  # Au-dessus de la dernière fréquence, renvoyer le dernier niveau
+
+        # Interpolation entre les points
+        for i in range(1, len(frequencies)):
+            if frequencies[i] >= freq:
+                f0, l0 = frequencies[i - 1], levels[i - 1]
+                f1, l1 = frequencies[i], levels[i]
+                if self.interpolation_type == 'linear':
+                    # Interpolation linéaire
+                    return l0 + (l1 - l0) * (freq - f0) / (f1 - f0)
+                elif self.interpolation_type == 'log':
+                    # Interpolation logarithmique
+                    if f0 <= 0 or f1 <= 0:
+                        raise ValueError("Frequencies must be positive for logarithmic interpolation.")
+                    return l0 + (l1 - l0) * (np.log(freq / f0) / np.log(f1 / f0))
+
+        raise ValueError("Interpolation failed. Frequency range not found.")
+
 
 
 class TempLimitsData(Data):
