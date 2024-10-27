@@ -384,7 +384,7 @@ class FFTSData(Data):
                  in_file=False):
         super().__init__(data_id, Data_Type.FFTS, data_name, data_size_in_bytes, number_of_elements, in_file,
                          sample_type='float32')
-        self.freq_step = freq_step
+        self.df = freq_step
         self.fmin = fmin
         self.unit = unit
         self.fft_signals = []  # Liste des objets FreqSignalData
