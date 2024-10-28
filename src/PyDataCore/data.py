@@ -53,6 +53,7 @@ class Data:
         if self.in_file:
             if folder is None:
                 raise ValueError("Folder must be specified for file-based storage.")
+            folder = os.path.abspath(folder)
             self.file_path = os.path.join(folder, f"{self.data_id}.dat")
 
             with open(self.file_path, 'wb') as f:
@@ -70,6 +71,18 @@ class Data:
                 # Définir la taille totale des données en bytes et le nombre total de samples
                 self.data_size_in_bytes = total_samples * self.sample_size
                 self.num_samples = total_samples
+
+        else:
+            # Stockage en RAM
+            self.data = []
+            total_samples = 0
+            for chunk in data_generator:
+                self.data.extend(chunk)
+                total_samples += len(chunk)
+
+            # Mettre à jour les informations de taille
+            self.data_size_in_bytes = total_samples * self.sample_size
+            self.num_samples = total_samples
 
     def store_data_from_object(self, data_object, folder=None):
         """
@@ -181,6 +194,32 @@ class ChunkableMixin:
             self.num_samples = total_samples
             print(f"Number of samples: {self.num_samples}")
 
+    # def read_chunked_data(self, chunk_size=1024):
+    #     """
+    #     Retourne un Générateur qui lit les données chunk par chunk.
+    #     :param chunk_size: Nombre de samples par chunk pour la lecture.
+    #     :yield: Un chunk de données à la fois.
+    #     """
+    #     print(type(self))
+    #     if self.data is None:
+    #         raise ValueError("Data is not loaded in RAM.")
+    #     if self.in_file and self.file_path:
+    #         with open(self.file_path, 'rb') as f:
+    #             while True:
+    #                 chunk = f.read(chunk_size * self.sample_size)
+    #                 if not chunk:
+    #                     break
+    #                 if self.sample_type == 'str':
+    #                     yield chunk.decode('utf-8')
+    #                 else:
+    #                     unpacked_chunk = struct.unpack(f'{len(chunk) // self.sample_size}{self.sample_format}', chunk)
+    #                     yield unpacked_chunk
+    #     else:
+    #         for i in range(0, len(self.data), chunk_size):
+    #             if self.sample_type == 'str':
+    #                 yield ''.join(self.data[i:i + chunk_size])
+    #             else:
+    #                 yield self.data[i:i + chunk_size]
     def read_chunked_data(self, chunk_size=1024):
         """
         Retourne un Générateur qui lit les données chunk par chunk.
@@ -188,6 +227,9 @@ class ChunkableMixin:
         :yield: Un chunk de données à la fois.
         """
         print(type(self))
+        if self.data is None:
+            raise ValueError("Data is not loaded in RAM.")
+
         if self.in_file and self.file_path:
             with open(self.file_path, 'rb') as f:
                 while True:
@@ -195,14 +237,17 @@ class ChunkableMixin:
                     if not chunk:
                         break
                     if self.sample_type == 'str':
-                        yield chunk.decode('utf-8')
+                        yield chunk.decode('utf-8')  # Décodage si type 'str'
                     else:
                         unpacked_chunk = struct.unpack(f'{len(chunk) // self.sample_size}{self.sample_format}', chunk)
                         yield unpacked_chunk
         else:
             for i in range(0, len(self.data), chunk_size):
                 if self.sample_type == 'str':
-                    yield ''.join(self.data[i:i + chunk_size])
+                    # Conversion en str si les éléments sont en bytes
+                    chunk = [item.decode('utf-8') if isinstance(item, bytes) else item for item in
+                             self.data[i:i + chunk_size]]
+                    yield ''.join(chunk)
                 else:
                     yield self.data[i:i + chunk_size]
 

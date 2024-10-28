@@ -26,9 +26,9 @@ def test_data_methods():
 
         # Création de l'objet Data
         data_id = f"test_{data_type}"
-        data_object = Data(data_id=data_id,  data_name=f"test_{data_type}",
-                          data_size_in_bytes=data_size_in_bytes, number_of_elements=num_samples,
-                          in_file=False, data_type=data_type)
+        data_object = Data(data_id=data_id, data_name=f"test_{data_type}",
+                           data_size_in_bytes=data_size_in_bytes, number_of_elements=num_samples,
+                           in_file=False, data_type=data_type)
 
         # Vérification de la méthode _get_sample_format_and_size
         print(f"Test _get_sample_format_and_size pour {data_type}")
@@ -44,7 +44,6 @@ def test_data_methods():
         #atacher la méthode read_chunked_data dans data_object
         data_object.__class__ = type("ChunkableMixin", (data_object.__class__, ChunkableMixin), {})
         print(type(data_object))
-
 
         print(f"Test read_chunked_data pour {data_type} (RAM)")
         data_read = []
@@ -169,8 +168,8 @@ def test_data_storage(data_type, num_samples, chunk_size, use_file):
     data_id = f"test_{data_type}"
     sample_type = data_type
     data_object = Data(data_id=data_id, data_type="SIGNAL", data_name=f"test_{data_type}",
-                      data_size_in_bytes=data_size_in_bytes, number_of_elements=num_samples,
-                      in_file=use_file, sample_type=sample_type)
+                       data_size_in_bytes=data_size_in_bytes, number_of_elements=num_samples,
+                       in_file=use_file, sample_type=sample_type)
 
     folder = "./test_files" if use_file else None
     if use_file and not os.path.exists(folder):
@@ -181,13 +180,18 @@ def test_data_storage(data_type, num_samples, chunk_size, use_file):
     # Utiliser le bon stockage selon que les données viennent d'un générateur ou d'un objet
     if isinstance(generator, np.ndarray):
         data_object.store_data_from_object(np.array(list(data_generator(data_type, num_samples, chunk_size))),
-                                          folder=folder)
+                                           folder=folder)
     else:
         data_object.store_data_from_data_generator(data_generator(data_type, num_samples, chunk_size), folder=folder)
 
+    # Convertir les données en fichier si nécessaire avant la lecture en chunks
+    if use_file:
+        #monkey patching pour attacher la méthode convert_ram_to_file dans data_object
+        data_object.__class__ = type("FileRamMixin", (data_object.__class__, FileRamMixin), {})
+        data_object.convert_file_to_ram()
+
     # Lire les données stockées et les comparer aux données d'origine
     data_read = []
-    #attacher la méthode read_chunked_data dans data_object
     data_object.__class__ = type("ChunkableMixin", (data_object.__class__, ChunkableMixin), {})
     for chunk in data_object.read_chunked_data(chunk_size):
         data_read.extend(chunk)
