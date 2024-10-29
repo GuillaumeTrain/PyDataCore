@@ -3,8 +3,7 @@ import tracemalloc
 
 import numpy as np
 
-from src.PyDataCore import TemporalSignalData
-from src.PyDataCore.data import Data, data_generator, Data_Type, ChunkableMixin, FileRamMixin
+from PyDataCore.data import Data, data_generator, ChunkableMixin, FileRamMixin
 
 
 def test_data_methods():

@@ -1,6 +1,5 @@
-from more_itertools.recipes import tabulate
 import tabulate
-from src.PyDataCore import DataPool, FFTSData, FreqSignalData, Data_Type
+from PyDataCore import DataPool, FFTSData, Data_Type
 import numpy as np
 
 # Créer une instance de DataPool

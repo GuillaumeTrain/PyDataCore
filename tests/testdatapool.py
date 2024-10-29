@@ -2,8 +2,8 @@
 from tabulate import tabulate
 import os
 import numpy as np
-from src.PyDataCore.datapool import DataPool
-from src.PyDataCore.data import Data_Type
+from PyDataCore.datapool import DataPool
+from PyDataCore.data import Data_Type
 
 
 # test de l'initialisation de la classe DataPool
@@ -48,8 +48,8 @@ def test_datapool_all_data_types():
         (Data_Type.CONSTANTS, [42.0, 3.14], [], "Constants"),
         (Data_Type.STR, "This is a test string", [], "StringData"),
         (Data_Type.INTS, [1, 2, 3, 4], [], "IntsData"),
-        (Data_Type.FREQ_LIMITS, [100.0, 200.0], ["dB"], "FreqLimits"),  # Ajout de "dB" comme unité
-        (Data_Type.TEMP_LIMITS, [0.0, 5.0], ["s"], "TempLimits"),  # Ajout de "s" comme unité
+        (Data_Type.FREQ_LIMIT, [100.0, 200.0], ["dB"], "FreqLimits"),  # Ajout de "dB" comme unité
+        (Data_Type.TEMP_LIMIT, [0.0, 5.0], ["s"], "TempLimits"),  # Ajout de "s" comme unité
     ]
 
     for data_type, data_value, args, data_name in test_cases:
@@ -64,7 +64,7 @@ def test_datapool_all_data_types():
         elif data_type == Data_Type.FFTS:
             data_id = pool.register_data(data_type, data_name, "source_1", protected=False, in_file=False, freq_step=args[0], fmin=args[1], unit=args[2])
             pool.store_data(data_id, data_value, "source_1")
-        elif data_type == Data_Type.FREQ_LIMITS or data_type == Data_Type.TEMP_LIMITS:
+        elif data_type == Data_Type.FREQ_LIMIT or data_type == Data_Type.TEMP_LIMIT:
             data_id = pool.register_data(data_type, data_name, "source_1", protected=False, in_file=False, unit=args[0])
             pool.store_data(data_id, data_value, "source_1")
         else:

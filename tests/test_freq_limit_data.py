@@ -1,12 +1,12 @@
 # Création du DataPool
-from src.PyDataCore import Data_Type, DataPool, FreqLimitsData
+from PyDataCore import Data_Type, DataPool, FreqLimitsData
 
 data_pool = DataPool()
 
 # Enregistrement des données de limites de fréquence dans le DataPool
 source_id = 'source1'
 data_id = data_pool.register_data(
-    data_type=Data_Type.FREQ_LIMITS,
+    data_type=Data_Type.FREQ_LIMIT,
     data_name='FreqLimitTest',
     source_id=source_id,
     unit='dB'

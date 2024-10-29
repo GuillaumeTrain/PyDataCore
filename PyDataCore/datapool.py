@@ -2,7 +2,9 @@ import numpy as np
 import os
 import pandas as pd
 from uuid import uuid4
-from src.PyDataCore.data import Data, data_generator, Data_Type, FilePathListData, FolderPathListData, FileListData, \
+#si dev src sinon si distrib PyDataCore
+
+from PyDataCore.data import Data, data_generator, Data_Type, FilePathListData, FolderPathListData, FileListData, \
     TemporalSignalData, FreqSignalData, FFTSData, ConstantsData, StrData, IntsData, FreqLimitsData, TempLimitsData
 
 
@@ -55,8 +57,8 @@ class DataPool:
             Data_Type.CONSTANTS.value: ConstantsData,
             Data_Type.STR.value: StrData,
             Data_Type.INTS.value: IntsData,
-            Data_Type.FREQ_LIMITS.value: FreqLimitsData,
-            Data_Type.TEMP_LIMITS.value: TempLimitsData,
+            Data_Type.FREQ_LIMIT.value: FreqLimitsData,
+            Data_Type.TEMP_LIMIT.value: TempLimitsData,
         }
 
         # Debugging: print the available data mappings

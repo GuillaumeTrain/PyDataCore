@@ -341,8 +341,8 @@ class Data_Type(Enum):
     FILE_PATHS = 0  # une liste de chemins de fichiers (doit pouvoir supporter une liste de chemins ou un seul chemin)
     FOLDER_PATHS = 1  # une liste de chemins de dossiers (doit pouvoir supporter une liste de dossiers ou un seul dossier)
     FILE_LIST = 2  # une liste de fichiers (doit pouvoir supporter une liste de fichiers ou un seul fichier)
-    FREQ_LIMITS = 5  # une liste de points de fréquence (float32) et de niveau (float32) pour définir les limites d'une bande de fréquence et un nom commun et une unité commune (comporte au moins 2 points en fréquence avec un niveau associé)
-    TEMP_LIMITS = 6  # une liste de points de temps (float32) et de niveau (float32) pour définir les limites d'une bande de temps et un nom commun et une unité commune(comporte au moins 2 points temporels avec un niveau associé)
+    FREQ_LIMIT = 5  # une liste de points de fréquence (float32) et de niveau (float32) pour définir les limites d'une bande de fréquence et un nom commun et une unité commune (comporte au moins 2 points en fréquence avec un niveau associé)
+    TEMP_LIMIT = 6  # une liste de points de temps (float32) et de niveau (float32) pour définir les limites d'une bande de temps et un nom commun et une unité commune(comporte au moins 2 points temporels avec un niveau associé)
     CONSTANTS = 8  # une liste de valeur constante (float32) avec leur nom (doit pouvoir supporter une liste de constantes ou une seule constante)
     STR = 9  # une chaîne de caractères avec son nom
     INTS = 10  # une liste d'entiers avec leurs noms (doit pouvoir supporter une liste d'entier ou un seul entier)
@@ -468,7 +468,7 @@ class IntsData(Data):
 
 class FreqLimitsData(Data):
     def __init__(self, data_id, data_name, data_size_in_bytes, number_of_elements, unit, in_file=False):
-        super().__init__(data_id, Data_Type.FREQ_LIMITS, data_name, data_size_in_bytes, number_of_elements, in_file,
+        super().__init__(data_id, Data_Type.FREQ_LIMIT, data_name, data_size_in_bytes, number_of_elements, in_file,
                          sample_type='float32')
         self.unit = unit
         self.data = []  # Liste de tuples (fréquence, niveau limite)
@@ -537,7 +537,7 @@ class FreqLimitsData(Data):
 
 class TempLimitsData(Data):
     def __init__(self, data_id, data_name, data_size_in_bytes, number_of_elements, unit, in_file=False):
-        super().__init__(data_id, Data_Type.TEMP_LIMITS, data_name, data_size_in_bytes, number_of_elements, in_file,
+        super().__init__(data_id, Data_Type.TEMP_LIMIT, data_name, data_size_in_bytes, number_of_elements, in_file,
                          sample_type='float32')
         self.unit = unit
 
