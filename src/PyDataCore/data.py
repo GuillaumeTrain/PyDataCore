@@ -1,6 +1,5 @@
 import struct
 from enum import Enum
-
 import numpy as np
 import os
 from termcolor import colored
@@ -194,32 +193,6 @@ class ChunkableMixin:
             self.num_samples = total_samples
             print(f"Number of samples: {self.num_samples}")
 
-    # def read_chunked_data(self, chunk_size=1024):
-    #     """
-    #     Retourne un Générateur qui lit les données chunk par chunk.
-    #     :param chunk_size: Nombre de samples par chunk pour la lecture.
-    #     :yield: Un chunk de données à la fois.
-    #     """
-    #     print(type(self))
-    #     if self.data is None:
-    #         raise ValueError("Data is not loaded in RAM.")
-    #     if self.in_file and self.file_path:
-    #         with open(self.file_path, 'rb') as f:
-    #             while True:
-    #                 chunk = f.read(chunk_size * self.sample_size)
-    #                 if not chunk:
-    #                     break
-    #                 if self.sample_type == 'str':
-    #                     yield chunk.decode('utf-8')
-    #                 else:
-    #                     unpacked_chunk = struct.unpack(f'{len(chunk) // self.sample_size}{self.sample_format}', chunk)
-    #                     yield unpacked_chunk
-    #     else:
-    #         for i in range(0, len(self.data), chunk_size):
-    #             if self.sample_type == 'str':
-    #                 yield ''.join(self.data[i:i + chunk_size])
-    #             else:
-    #                 yield self.data[i:i + chunk_size]
     def read_chunked_data(self, chunk_size=1024):
         """
         Retourne un Générateur qui lit les données chunk par chunk.
@@ -227,7 +200,7 @@ class ChunkableMixin:
         :yield: Un chunk de données à la fois.
         """
         print(type(self))
-        if self.data is None:
+        if self.data is None and not self.in_file:
             raise ValueError("Data is not loaded in RAM.")
 
         if self.in_file and self.file_path:
@@ -423,23 +396,44 @@ class FreqSignalData(Data, ChunkableMixin, FileRamMixin):
         self.fmin = fmin  # fréquence minimum (par défaut à 0)
         self.timestamp = timestamp  # timestamp optionnel (par défaut à 0)
 
-
 class FFTSData(Data):
-    def __init__(self, data_id, data_name, data_size_in_bytes, number_of_elements, freq_step, fmin, unit,
+    def __init__(self, data_id, data_name, data_size_in_bytes, number_of_elements, freq_step, fmin, unit, datapool=None,
                  in_file=False):
+        """
+        Classe pour les données FFTS, stocke les data_id des objets FreqSignalData et utilise un DataPool pour
+        accéder aux objets complets.
+        """
         super().__init__(data_id, Data_Type.FFTS, data_name, data_size_in_bytes, number_of_elements, in_file,
                          sample_type='float32')
         self.df = freq_step
         self.fmin = fmin
         self.unit = unit
-        self.fft_signals = []  # Liste des objets FreqSignalData
+        self.data = []  # Liste des data_id des objets FreqSignalData
+        self.datapool = datapool  # Référence au DataPool pour récupérer les objets FreqSignalData
 
     def add_fft_signal(self, fft_signal):
-        if isinstance(fft_signal, FreqSignalData):
-            self.fft_signals.append(fft_signal)
-        else:
+        """
+        Ajoute un signal FFT en stockant uniquement son data_id, vérifie que l'objet est bien une instance de
+        FreqSignalData.
+        """
+        if not isinstance(fft_signal, FreqSignalData):
             raise ValueError("L'élément ajouté doit être une instance de FreqSignalData")
 
+        self.data.append(fft_signal.data_id)
+
+
+    @property
+    def fft_signals(self):
+        """
+        Récupère les objets FreqSignalData à partir de leurs data_id en interrogeant le DataPool.
+        """
+        return [self.datapool.get_data_info(data_id)['data_object'].values[0] for data_id in self.data]
+    @property
+    def fft_ids(self):
+        """
+        Récupère les objets FreqSignalData à partir de leurs data_id en interrogeant le DataPool.
+        """
+        return self.data
 
 class ConstantsData(Data):
     def __init__(self, data_id, data_name, data_size_in_bytes, number_of_elements, in_file=False):

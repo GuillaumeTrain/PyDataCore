@@ -2,7 +2,7 @@ import numpy as np
 import os
 import pandas as pd
 from uuid import uuid4
-from .data import Data, data_generator, Data_Type, FilePathListData, FolderPathListData, FileListData, \
+from src.PyDataCore.data import Data, data_generator, Data_Type, FilePathListData, FolderPathListData, FileListData, \
     TemporalSignalData, FreqSignalData, FFTSData, ConstantsData, StrData, IntsData, FreqLimitsData, TempLimitsData
 
 
@@ -74,7 +74,17 @@ class DataPool:
             # Instanciation de la classe de donnée avec les paramètres optionnels
             data_size_in_bytes = 0  # Taille par défaut à 0, sera mise à jour lors du stockage
             number_of_elements = 0  # À ajuster également lors du stockage
-
+            # si data_size_in_bytes et number_of_elements sont passés en kwargs, les utiliser
+            if 'data_size_in_bytes' in kwargs:
+                data_size_in_bytes = kwargs['data_size_in_bytes']
+            if 'number_of_elements' in kwargs:
+                number_of_elements = kwargs['number_of_elements']
+            #virer les paramètres optionnels pour ne pas les passer à l'instanciation
+            kwargs.pop('data_size_in_bytes', None)
+            kwargs.pop('number_of_elements', None)
+            if data_class is FFTSData :
+                #ajouter le datapool au kwargs
+                kwargs['datapool'] = self
             # Passe les kwargs à l'instanciation
             data_obj = data_class(
                 data_id=data_id,
@@ -225,6 +235,7 @@ class DataPool:
 
         # Vérifier que la source est bien celle qui a enregistré la donnée
         source_row = self.source_to_data[self.source_to_data['data_id'] == data_id]
+        # print(f"Source row: {source_row} for data ID: {data_id}, write attempt by source: {source_id}")
         if source_row.empty or source_row['source_id'].values[0] != source_id:
             raise PermissionError(f"Source {source_id} is not authorized to store data for {data_id}")
 
@@ -296,6 +307,22 @@ class DataPool:
         # Si la donnée n'est pas verrouillée, renvoyer ses informations
         return self.data_registry.loc[self.data_registry['data_id'] == data_id]
 
+    def get_data_object(self, data_id, subscriber_id):
+        """Retourne l'objet Data correspondant à l'ID de la donnée."""
+        # Vérifier si la donnée est verrouillée
+        is_locked = self.source_to_data.loc[self.source_to_data['data_id'] == data_id, 'locked'].values[0]
+        if is_locked:
+            raise PermissionError(f"Data {data_id} is locked and cannot be read.")
+
+        # Vérifier si le subscriber est autorisé à lire la donnée
+        if subscriber_id not in self.subscriber_to_data.loc[
+            self.subscriber_to_data['data_id'] == data_id, 'subscriber_id'].values:
+            raise PermissionError(f"Subscriber {subscriber_id} is not authorized to read data {data_id}")
+
+        # Récupérer l'objet Data correspondant
+        data_obj = self.data_registry.loc[self.data_registry['data_id'] == data_id, 'data_object'].values[0]
+        return data_obj
+
     def get_data(self, data_id, subscriber_id):
         """
         Permet à un subscriber de lire les données complètes.
@@ -316,12 +343,13 @@ class DataPool:
             raise PermissionError(f"Subscriber {subscriber_id} is not authorized to read data {data_id}")
         #vérifier si la donnée est sous forme de fichier
         data_obj = self.data_registry.loc[self.data_registry['data_id'] == data_id, 'data_object'].values[0]
+        print(f"Data object for {data_id}: {data_obj}")
         if data_obj is None:
             raise ValueError(f"Data {data_id} has not been stored yet.")
         data = data_obj.read_data()  #la méthode read_data() de la classe Data gère le cas de fichier ou de RAM
 
         # Acquitter la donnée après la lecture
-        self.acknowledge_data(data_id, subscriber_id)
+        # self.acknowledge_data(data_id, subscriber_id)
 
         return data
 
