@@ -4,7 +4,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='PyDataCore',
-    version='1.1.0',
+    version='1.1.1',
     author='Guillaume Train',
     author_email='g.train@live.fr',
     description='A data library for handling temporal, frequency signals, and data pools.',

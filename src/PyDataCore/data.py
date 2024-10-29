@@ -396,6 +396,7 @@ class FreqSignalData(Data, ChunkableMixin, FileRamMixin):
         self.fmin = fmin  # fréquence minimum (par défaut à 0)
         self.timestamp = timestamp  # timestamp optionnel (par défaut à 0)
 
+
 class FFTSData(Data):
     def __init__(self, data_id, data_name, data_size_in_bytes, number_of_elements, freq_step, fmin, unit, datapool=None,
                  in_file=False):
@@ -421,19 +422,20 @@ class FFTSData(Data):
 
         self.data.append(fft_signal.data_id)
 
-
     @property
     def fft_signals(self):
         """
         Récupère les objets FreqSignalData à partir de leurs data_id en interrogeant le DataPool.
         """
         return [self.datapool.get_data_info(data_id)['data_object'].values[0] for data_id in self.data]
+
     @property
     def fft_ids(self):
         """
         Récupère les objets FreqSignalData à partir de leurs data_id en interrogeant le DataPool.
         """
         return self.data
+
 
 class ConstantsData(Data):
     def __init__(self, data_id, data_name, data_size_in_bytes, number_of_elements, in_file=False):
@@ -473,6 +475,8 @@ class FreqLimitsData(Data):
         self.unit = unit
         self.data = []  # Liste de tuples (fréquence, niveau limite)
         self.interpolation_type = None
+        self.freq_min = None
+        self.freq_max = None
 
     def set_interpolation_type(self, interpolation_type):
         """
@@ -491,6 +495,11 @@ class FreqLimitsData(Data):
         if self.data and frequency <= self.data[-1][0]:
             raise ValueError("Frequency points must be in strictly increasing order.")
         self.data.append((frequency, level))
+        #récupérer les fréquences max et min
+        if self.freq_min is None or frequency < self.freq_min:
+            self.freq_min = frequency
+        if self.freq_max is None or frequency > self.freq_max:
+            self.freq_max = frequency
 
     def clear_limit_points(self):
         """
@@ -534,12 +543,69 @@ class FreqLimitsData(Data):
         raise ValueError("Interpolation failed. Frequency range not found.")
 
 
-
 class TempLimitsData(Data):
     def __init__(self, data_id, data_name, data_size_in_bytes, number_of_elements, unit, in_file=False):
+        """
+        Initializes an instance of TempLimitsData.
+
+        :param data_id: Unique identifier for the data.
+        :param data_name: Name of the data.
+        :param data_size_in_bytes: Size of the data in bytes.
+        :param number_of_elements: Number of elements (points) in the data.
+        :param unit: Unit of the limit values (e.g., V, A).
+        :param in_file: Whether the data is stored in a file or in RAM.
+        """
         super().__init__(data_id, Data_Type.TEMP_LIMIT, data_name, data_size_in_bytes, number_of_elements, in_file,
                          sample_type='float32')
         self.unit = unit
+        self.data = []  # List of tuples (level, transparency_time, release_time)
+        self.time_min = None
+        self.time_max = None
+
+    def add_limit_point(self, level, transparency_time, release_time):
+        """
+        Adds a limit point to the temporal limits data.
+
+        :param level: Level of the limit.
+        :param transparency_time: Transparency time of the limit.
+        :param release_time: Release time of the limit.
+        """
+        if self.data and transparency_time <= self.data[-1][1]:
+            raise ValueError("Transparency times must be in strictly increasing order.")
+
+        self.data.append((level, transparency_time, release_time))
+
+        # Update minimum and maximum time ranges
+        if self.time_min is None or transparency_time < self.time_min:
+            self.time_min = transparency_time
+        if self.time_max is None or release_time > self.time_max:
+            self.time_max = release_time
+
+    def clear_limit_points(self):
+        """Clears all limit points from the temporal limits data."""
+        self.data.clear()
+        self.time_min = None
+        self.time_max = None
+
+    def get_limits_in_range(self, start_time, end_time):
+        """
+        Retrieves all limit points within a specified time range.
+
+        :param start_time: Start time of the range.
+        :param end_time: End time of the range.
+        :return: List of limit points (level, transparency_time, release_time) within the specified range.
+        """
+        if start_time > end_time:
+            raise ValueError("Start time must be less than or equal to end time.")
+
+        # Filter data points based on the specified time range
+        limits_in_range = [
+            (level, transparency_time, release_time)
+            for level, transparency_time, release_time in self.data
+            if transparency_time >= start_time and release_time <= end_time
+        ]
+
+        return limits_in_range
 
 
 # Obsolète Générateur de données pour différents types (int32, int64, float32, float64)
@@ -566,4 +632,3 @@ def data_generator(data_type, num_samples, chunk_size):
 
     for i in range(0, num_samples, chunk_size):
         yield data[i:i + chunk_size]  # Retourne un chunk de taille définie
-
