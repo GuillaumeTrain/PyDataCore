@@ -3,7 +3,7 @@ import tracemalloc
 
 import numpy as np
 
-from PyDataCore.data import Data, data_generator, ChunkableMixin, FileRamMixin
+from src.PyDataCore.data import Data, data_generator, ChunkableMixin, FileRamMixin
 
 
 def test_data_methods():

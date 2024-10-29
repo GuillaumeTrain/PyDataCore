@@ -1,5 +1,5 @@
 import tabulate
-from PyDataCore import DataPool, FFTSData, Data_Type
+from src.PyDataCore import DataPool, FFTSData, Data_Type
 import numpy as np
 
 # Créer une instance de DataPool

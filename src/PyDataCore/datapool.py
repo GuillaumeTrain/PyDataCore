@@ -4,7 +4,7 @@ import pandas as pd
 from uuid import uuid4
 #si dev src sinon si distrib PyDataCore
 
-from PyDataCore.data import Data, data_generator, Data_Type, FilePathListData, FolderPathListData, FileListData, \
+from .data import Data_Type, FilePathListData, FolderPathListData, FileListData, \
     TemporalSignalData, FreqSignalData, FFTSData, ConstantsData, StrData, IntsData, FreqLimitsData, TempLimitsData
 
 

@@ -157,7 +157,7 @@ Represents a frequency signal with attributes such as frequency step, unit, and 
 Here is a basic usage example of the `PyDataCore` framework, focusing on the `DataPool` class:
 
 ```python
-from PyDataCore import DataPool, Data_Type
+from src.PyDataCore import DataPool, Data_Type
 
 # Create a new DataPool
 pool = DataPool()

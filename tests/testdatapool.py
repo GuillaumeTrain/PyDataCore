@@ -2,8 +2,8 @@
 from tabulate import tabulate
 import os
 import numpy as np
-from PyDataCore.datapool import DataPool
-from PyDataCore.data import Data_Type
+from src.PyDataCore.datapool import DataPool
+from src.PyDataCore.data import Data_Type
 
 
 # test de l'initialisation de la classe DataPool

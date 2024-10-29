@@ -1,6 +1,6 @@
 import os
 import numpy as np
-from PyDataCore.data import TemporalSignalData, FreqSignalData
+from src.PyDataCore.data import TemporalSignalData, FreqSignalData
 
 
 def print_chunk_info(chunk, chunk_type=""):
