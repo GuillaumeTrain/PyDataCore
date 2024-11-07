@@ -504,5 +504,19 @@ class DataPool:
         #unlocker la donnée après la conversion
         self.unlock_data(data_id)
 
+    async def wait_for_data_ready(self, data_id):
+        data = self.data_registry.get(data_id)
+        if data:
+            await data.data_ready.wait()
+        else:
+            raise KeyError(f"Data with ID {data_id} not found in DataPool.")
+
+    def mark_data_as_ready(self, data_id):
+        data = self.data_registry.get(data_id)
+        if data:
+            data.mark_data_ready()
+        else:
+            raise KeyError(f"Data with ID {data_id} not found in DataPool.")
+
 
 

@@ -1,3 +1,4 @@
+import asyncio
 import struct
 from enum import Enum
 import numpy as np
@@ -27,8 +28,17 @@ class Data:
         self.sample_type = sample_type
         self.data = None
         self.file_path = None
+        self.data_ready = asyncio.Event()  # État de disponibilité de la donnée
         self.sample_format, self.sample_size = self._get_sample_format_and_size(sample_type)
+        self.mark_data_unready()
 
+    def mark_data_ready(self):
+        """Marque la donnée comme prête."""
+        self.data_ready.set()
+
+    def mark_data_unready(self):
+        """Réinitialise l'état de disponibilité de la donnée."""
+        self.data_ready.clear()
     def _get_sample_format_and_size(self, sample_type):
         """
         Retourne le format struct et la taille en octets en fonction du type de sample.
@@ -492,8 +502,8 @@ class FreqLimitsData(Data):
         :param frequency: Fréquence (en Hz) pour le point de limite.
         :param level: Niveau limite correspondant à la fréquence.
         """
-        if self.data and frequency <= self.data[-1][0]:
-            raise ValueError("Frequency points must be in strictly increasing order.")
+        # if self.data and frequency <= self.data[-1][0]:
+        #     raise ValueError("Frequency points must be in strictly increasing order.")
         self.data.append((frequency, level))
         #récupérer les fréquences max et min
         if self.freq_min is None or frequency < self.freq_min:
